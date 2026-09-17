@@ -19,11 +19,11 @@ configuration behaves exactly as before: no network, no key, no download.
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Final, cast
 
 import httpx2
 
-from trackinizer.server.store.shared import EMBEDDING_DIM
+from trackinizer.server.embedder import StubEmbedder
 from trackinizer.types.errors import ConflictError
 
 
@@ -42,7 +42,8 @@ DEFAULT_TIMEOUT_SECONDS: Final = 30.0
 # Module-level so a test can monkey-patch one helper and inject an
 # ``httpx2.MockTransport``, the pattern ``api/oauth_routes.py`` established.
 def _http_client(
-    *, timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    *,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> httpx2.AsyncClient:
     """Build the client used for embedding round-trips."""
     return httpx2.AsyncClient(timeout=timeout_seconds)
@@ -80,7 +81,7 @@ class HttpEmbedder:
         model: str,
         api_key: str | None = None,
         name: str | None = None,
-        dim: int = EMBEDDING_DIM,
+        dim: int = StubEmbedder.dim,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         if not url.strip():
@@ -145,17 +146,28 @@ class HttpEmbedder:
                 f"embedding endpoint {self._url} returned {type(body).__name__}, "
                 "expected an object",
             )
-        data = body.get("data")
+        # response.json() is typed Any (basedpyright cannot know the shape of
+        # someone else's HTTP response), so every access below is cast rather
+        # than left to propagate Unknown through isinstance narrowing alone.
+        body_obj = cast("dict[str, object]", body)
+        data = body_obj.get("data")
         if not isinstance(data, list) or not data:
             raise ConflictError(
                 f"embedding endpoint {self._url} returned no data entries",
             )
+        data = cast("list[object]", data)
         first = data[0]
-        raw = first.get("embedding") if isinstance(first, dict) else None
+        if not isinstance(first, dict):
+            raise ConflictError(
+                f"embedding endpoint {self._url} returned no embedding vector",
+            )
+        first_obj = cast("dict[str, object]", first)
+        raw = first_obj.get("embedding")
         if not isinstance(raw, list):
             raise ConflictError(
                 f"embedding endpoint {self._url} returned no embedding vector",
             )
+        raw = cast("list[object]", raw)
         # Width is checked here, not at construction: an endpoint may accept
         # the ``dimensions`` field and ignore it, which would otherwise surface
         # much later as a pgvector dimension error mid-transaction.
@@ -166,7 +178,7 @@ class HttpEmbedder:
                 "honours the 'dimensions' request field",
             )
         try:
-            vector = [float(x) for x in raw]
+            vector = [float(cast("int | float | str", x)) for x in raw]
         except (TypeError, ValueError) as exc:
             raise ConflictError(
                 f"embedding endpoint {self._url} returned a non-numeric vector",

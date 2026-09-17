@@ -18,8 +18,8 @@ import httpx2
 import pytest
 
 from trackinizer.server import embedder_http
+from trackinizer.server.embedder import StubEmbedder
 from trackinizer.server.embedder_http import HttpEmbedder
-from trackinizer.server.store.shared import EMBEDDING_DIM
 from trackinizer.types.errors import ConflictError
 
 
@@ -65,7 +65,7 @@ def _embedder(
 @pytest.mark.asyncio
 async def test_returns_a_normalized_vector_of_the_expected_width() -> None:
     """The happy path: an OpenAI-shaped body becomes a unit vector."""
-    raw = [3.0, 4.0] + [0.0] * (EMBEDDING_DIM - 2)  # norm 5, so easy to check
+    raw = [3.0, 4.0] + [0.0] * (StubEmbedder.dim - 2)  # norm 5, so easy to check
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         del request
@@ -74,7 +74,7 @@ async def test_returns_a_normalized_vector_of_the_expected_width() -> None:
     with _patched(handler):
         vector = await _embedder().embed("momentum decays")
 
-    assert len(vector) == EMBEDDING_DIM
+    assert len(vector) == StubEmbedder.dim
     assert vector[0] == pytest.approx(0.6)
     assert vector[1] == pytest.approx(0.8)
     assert sum(x * x for x in vector) == pytest.approx(1.0)
@@ -92,14 +92,17 @@ async def test_sends_the_openai_request_shape() -> None:
         seen.update(body)
         seen["path"] = request.url.path
         seen["auth"] = request.headers.get("Authorization")
-        return httpx2.Response(200, json=_ok_body([1.0] + [0.0] * (EMBEDDING_DIM - 1)))
+        return httpx2.Response(
+            200,
+            json=_ok_body([1.0] + [0.0] * (StubEmbedder.dim - 1)),
+        )
 
     with _patched(handler):
         await _embedder(api_key="sk-test").embed("a claim")
 
     assert seen["input"] == "a claim"
     assert seen["model"] == "test-model"
-    assert seen["dimensions"] == EMBEDDING_DIM
+    assert seen["dimensions"] == StubEmbedder.dim
     assert seen["path"] == "/v1/embeddings"
     assert seen["auth"] == "Bearer sk-test"
 
@@ -111,7 +114,10 @@ async def test_omits_authorization_when_no_key_is_configured() -> None:
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         seen["auth"] = request.headers.get("Authorization")
-        return httpx2.Response(200, json=_ok_body([1.0] + [0.0] * (EMBEDDING_DIM - 1)))
+        return httpx2.Response(
+            200,
+            json=_ok_body([1.0] + [0.0] * (StubEmbedder.dim - 1)),
+        )
 
     with _patched(handler):
         await _embedder().embed("a claim")
@@ -141,7 +147,7 @@ async def test_a_zero_vector_is_rejected() -> None:
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         del request
-        return httpx2.Response(200, json=_ok_body([0.0] * EMBEDDING_DIM))
+        return httpx2.Response(200, json=_ok_body([0.0] * StubEmbedder.dim))
 
     with _patched(handler), pytest.raises(ConflictError, match="zero vector"):
         await _embedder().embed("a claim")
@@ -214,7 +220,10 @@ async def test_a_trailing_slash_on_the_url_does_not_double_up() -> None:
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
-        return httpx2.Response(200, json=_ok_body([1.0] + [0.0] * (EMBEDDING_DIM - 1)))
+        return httpx2.Response(
+            200,
+            json=_ok_body([1.0] + [0.0] * (StubEmbedder.dim - 1)),
+        )
 
     with _patched(handler):
         await _embedder(url="https://example.invalid/v1/").embed("a claim")
