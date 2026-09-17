@@ -440,7 +440,8 @@ class _ReadMixin(_StoreShared):
         async def run(active: Conn) -> list[tuple[Inquiry, float]]:
             rows = await active.fetch(sql, *params)
             outbound, inbound = await fetch_edges_bulk(
-                active, [cast(UUID, r["id"]) for r in rows]
+                active,
+                [cast(UUID, r["id"]) for r in rows],
             )
             return [
                 (
