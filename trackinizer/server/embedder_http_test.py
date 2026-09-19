@@ -7,9 +7,7 @@ established -- so the suite never makes a network call.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import AbstractContextManager
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import json
@@ -21,6 +19,11 @@ from trackinizer.server import embedder_http
 from trackinizer.server.embedder import StubEmbedder
 from trackinizer.server.embedder_http import HttpEmbedder
 from trackinizer.types.errors import ConflictError
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from contextlib import AbstractContextManager
 
 
 def _ok_body(vector: list[float]) -> dict[str, object]:
