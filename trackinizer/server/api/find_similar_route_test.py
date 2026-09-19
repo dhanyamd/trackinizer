@@ -8,9 +8,8 @@ path segment declared after ``/{target_id}`` would be swallowed by it).
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import uuid
 
@@ -30,7 +29,12 @@ from trackinizer.server.api.conftest import (
 )
 from trackinizer.server.embedder import StubEmbedder
 from trackinizer.server.store.core import Store
-from trackinizer.types.inquiries import Inquiry
+
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from trackinizer.types.inquiries import Inquiry
 
 
 class _SemanticEmbedder:

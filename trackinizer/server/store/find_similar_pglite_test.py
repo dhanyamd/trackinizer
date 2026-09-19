@@ -9,7 +9,7 @@ ordered, so "is the nearest row the right one" is a meaningful assertion.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 import math
 import uuid
@@ -17,12 +17,17 @@ import uuid
 import pytest
 import pytest_asyncio
 
-from trackinizer.lib.postgres import PGliteEngine
 from trackinizer.lib.postgres.testing import reset_schema
 from trackinizer.server.embedder import StubEmbedder
 from trackinizer.server.store.core import Store
 from trackinizer.server.store.shared import embeddable_text
 from trackinizer.wire.bodies import SubmitBelief, SubmitExperiment
+
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from trackinizer.lib.postgres import PGliteEngine
 
 
 def _unit(angle: float) -> list[float]:
