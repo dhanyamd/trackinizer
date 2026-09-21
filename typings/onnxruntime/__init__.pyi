@@ -14,6 +14,10 @@ class SessionOptions:
 
     def __init__(self) -> None: ...
 
+class NodeArg:
+    name: str
+    shape: list[int | str]
+
 class InferenceSession:
     def __init__(
         self,
@@ -26,4 +30,5 @@ class InferenceSession:
         output_names: list[str] | None,
         input_feed: dict[str, np.ndarray],
     ) -> list[np.ndarray]: ...
+    def get_inputs(self) -> list[NodeArg]: ...
     def end_profiling(self) -> str: ...

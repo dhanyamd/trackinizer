@@ -11,9 +11,19 @@ ONNX layout varies per repo: optimum's ``main_export`` writes ``model.onnx``
 under an ``onnx/`` subfolder, while the ``onnx-community`` mirrors place it at
 the repo root. A large graph also ships its weights in an external-data sidecar
 (``model.onnx_data``) that ONNX Runtime loads by a path RELATIVE to the graph
-file, so both files must land in the same cached directory -- the loader fetches
+file, so both files must land in the same directory -- the loader fetches
 the sidecar first when the repo has one, then the graph. The per-model
 :class:`OnnxSource` names the subfolder and whether a sidecar exists.
+
+The graph and its sidecar are fetched with ``local_dir`` rather than the plain
+cache path ``hf_hub_download`` normally returns. The normal cache layout
+symlinks each file into a content-addressed blob store, so two DIFFERENT
+files (the graph and its sidecar) resolve to two UNRELATED real paths even
+though their symlinks sit in the same snapshot folder. ONNX Runtime validates
+the sidecar's RESOLVED location against the graph's, not the snapshot folder
+they appear to share, so loading straight from the cache fails every time
+with "External data path escapes model directory". ``local_dir`` writes real
+files instead of symlinks, so the two genuinely share one directory.
 
 The heavy ``onnxruntime`` / ``huggingface_hub`` imports are function-local so
 importing this module (which the registry does at config time) pulls neither
@@ -23,6 +33,7 @@ until a model actually loads.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from tokenizers import Tokenizer
@@ -64,10 +75,12 @@ def load_onnx_model(
 ) -> tuple[Tokenizer, InferenceSession]:
     """Load ``source``'s ONNX graph and tokenizer on ``device`` (no network).
 
-    Fetches the external-data sidecar (when present) and the graph into the same
-    cached directory, loads the graph onto the execution provider ``device``
-    selects (CUDA for ``cuda*``, else CPU), and loads ``tokenizer.json``. Reads
-    the provisioned HF cache; passes no ``cache_dir``.
+    Fetches the external-data sidecar (when present) and the graph into the
+    same real directory, loads the graph onto the execution provider
+    ``device`` selects (CUDA for ``cuda*``, else CPU), and loads
+    ``tokenizer.json``. Reads the provisioned HF cache; passes no
+    ``cache_dir`` for the tokenizer fetch, which has no co-location
+    requirement and so has no need to escape the shared cache.
 
     Args:
       source: The model's ONNX repo location.
@@ -79,23 +92,39 @@ def load_onnx_model(
       session: The ONNX Runtime inference session on the chosen provider.
 
     """
+    from huggingface_hub import constants as hf_constants  # noqa: PLC0415
+
     import huggingface_hub  # noqa: PLC0415 -- deferred so config-time imports never pull huggingface_hub.
     import onnxruntime  # noqa: PLC0415 -- deferred so config-time imports never pull onnxruntime.
 
+    # ``local_dir`` writes real files instead of the cache's usual symlinks,
+    # so the graph and its sidecar genuinely land in one directory -- see the
+    # module docstring for why the plain cache path fails ONNX Runtime's
+    # co-location check. Anchored under HF_HOME (not a temp dir) so repeated
+    # loads reuse the same materialized copy instead of re-downloading, and a
+    # slug of the repo id keeps different models from colliding.
+    local_dir = (
+        Path(hf_constants.HF_HOME)
+        / "onnx-materialized"
+        / source.model_id.replace("/", "--")
+        / (source.subfolder or ".")
+    )
     if source.has_sidecar:
         # ONNX Runtime resolves the sidecar by a path relative to the graph, so
-        # it must be cached alongside; download it first for that co-location.
+        # it must land alongside; fetch it first for that co-location.
         _ = huggingface_hub.hf_hub_download(
             source.model_id,
             "model.onnx_data",
             subfolder=source.subfolder or None,
             revision=source.revision,
+            local_dir=local_dir,
         )
     onnx_path = huggingface_hub.hf_hub_download(
         source.model_id,
         _ONNX_FILENAME,
         subfolder=source.subfolder or None,
         revision=source.revision,
+        local_dir=local_dir,
     )
     tokenizer_path = huggingface_hub.hf_hub_download(
         source.model_id,

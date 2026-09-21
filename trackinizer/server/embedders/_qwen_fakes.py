@@ -102,6 +102,16 @@ class FakeSession:
         )
         return [np.concatenate([prefix, tail], axis=2)]
 
+    def get_inputs(self) -> list[object]:
+        """Report no declared inputs: this fake models a plain encoder export.
+
+        ``_embed_sync`` only adds ``position_ids`` / an empty KV cache for
+        inputs the real graph actually declares, so an empty list here keeps
+        this fake's existing encoder-only behavior -- neither extra input is
+        added, matching what :meth:`run` above already expects to receive.
+        """
+        return []
+
 
 def install_capturing(
     monkeypatch: pytest.MonkeyPatch,

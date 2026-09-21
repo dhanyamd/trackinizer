@@ -255,7 +255,20 @@ class QwenFamilyEmbedder:
         if self._tokenizer is None or self._session is None:
             raise ValueError("Expected the model to be loaded before embedding.")
         batch = _encode(self._tokenizer, texts, max_length=_MAX_TOKENS)
-        hidden: FloatArray = self._session.run(["last_hidden_state"], batch)[0]
+        feed: dict[str, IntArray | FloatArray] = dict(batch)
+        # A last-token-pool model is architecturally a causal LM, so its ONNX
+        # export carries the full decoder interface (position_ids + a
+        # per-layer KV cache) even though embedding only ever needs one
+        # forward pass with no prior tokens. Only added when the graph
+        # actually declares them, so a plain encoder-only export in this
+        # family still runs untouched.
+        input_names = {inp.name for inp in self._session.get_inputs()}
+        if "position_ids" in input_names:
+            feed["position_ids"] = _position_ids(batch["attention_mask"])
+        feed.update(
+            _empty_kv_cache(self._session, batch_size=batch["input_ids"].shape[0]),
+        )
+        hidden: FloatArray = self._session.run(["last_hidden_state"], feed)[0]
         pooled = _last_token_pool(hidden, batch["attention_mask"])
         # Slice BEFORE normalize: Matryoshka nests the informative dims in the
         # prefix, and the truncated vector must be renormalized to unit length
@@ -284,6 +297,58 @@ def _encode(
         dtype=np.int64,
     )
     return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+
+def _position_ids(attention_mask: IntArray) -> IntArray:
+    """Left-padding-aware position ids: each row's 0-based index of its real tokens.
+
+    With left padding, pad tokens precede the real ones, so a plain
+    ``arange`` would assign every real token the wrong position. The
+    standard recipe -- cumulative sum of the mask minus one -- gives each
+    real token its correct 0-based position; a padded position gets a
+    negative value clamped to 0, which is fine since that position is
+    masked out of attention anyway.
+    """
+    position_ids: IntArray = attention_mask.cumsum(-1) - 1
+    return np.clip(position_ids, 0, None).astype(np.int64)
+
+
+def _empty_kv_cache(
+    session: InferenceSession,
+    *,
+    batch_size: int,
+) -> dict[str, FloatArray]:
+    """Build a zero-length KV cache for every ``past_key_values.*`` input the graph declares.
+
+    A last-token-pool model is architecturally a causal LM: its ONNX export
+    keeps the full decoder interface even though embedding is always a single
+    forward pass with no prior tokens, so every layer's cache is empty --
+    zero-length on the sequence axis. The head count and head dim come from
+    the session's OWN reported shape rather than a hardcoded constant, so this
+    handles every family member's export (0.6B/4B/8B each have different
+    shapes here) without per-model special-casing.
+    """
+    cache: dict[str, FloatArray] = {}
+    for inp in session.get_inputs():
+        if not inp.name.startswith("past_key_values."):
+            continue
+        _batch_dim, num_heads, _past_seq_dim, head_dim = inp.shape
+        # Only the batch and past-sequence axes are ever dynamic (symbolic
+        # names like "batch_size"); a real graph always reports concrete head
+        # count / head dim. A symbolic value here means the graph's shape
+        # doesn't match this function's assumption -- fail loudly rather than
+        # build a wrong-shaped cache that ONNX Runtime would reject anyway.
+        if not isinstance(num_heads, int) or not isinstance(head_dim, int):
+            raise TypeError(
+                f"{inp.name} has a non-concrete head/dim shape {inp.shape!r}; "
+                "expected [batch, num_heads, past_seq, head_dim] with "
+                "num_heads and head_dim both fixed integers.",
+            )
+        cache[inp.name] = np.zeros(
+            (batch_size, num_heads, 0, head_dim),
+            dtype=np.float32,
+        )
+    return cache
 
 
 # Per the Qwen recipe: with left padding the last real token is at position -1
