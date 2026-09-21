@@ -265,9 +265,8 @@ class QwenFamilyEmbedder:
         input_names = {inp.name for inp in self._session.get_inputs()}
         if "position_ids" in input_names:
             feed["position_ids"] = _position_ids(batch["attention_mask"])
-        feed.update(
-            _empty_kv_cache(self._session, batch_size=batch["input_ids"].shape[0]),
-        )
+        batch_size = int(batch["input_ids"].shape[0])  # pyright: ignore[reportAny] -- NumPy shape indexing is dtype-erased.
+        feed.update(_empty_kv_cache(self._session, batch_size=batch_size))
         hidden: FloatArray = self._session.run(["last_hidden_state"], feed)[0]
         pooled = _last_token_pool(hidden, batch["attention_mask"])
         # Slice BEFORE normalize: Matryoshka nests the informative dims in the
