@@ -699,7 +699,8 @@ class Client:
           target_id: Belief or Experiment ID to score.
 
         Returns:
-          result: Strength in ``[0, 1]``; 0.5 is neutral.
+          result: Strength in ``[0.25, 1)`` (the Euler-based ``[b**2, 1)`` with
+            base ``b = 0.5``); 0.5 is neutral.
 
         """
         where = f"/api/inquiries/{target_id}/strength"

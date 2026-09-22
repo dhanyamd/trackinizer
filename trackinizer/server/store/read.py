@@ -73,6 +73,21 @@ only kinds ``strength_for`` recurses into. Every other Artifact kind can
 cite but never be cited, so it is always a recursion leaf."""
 
 
+def _logistic(x: float) -> float:
+    """Return ``1 / (1 + e**x)`` without overflowing on either tail.
+
+    The complementary logistic (note the sign: ``1/(1+e**x)``, not the usual
+    ``1/(1+e**-x)``). ``strength_for`` needs ``1/(1 + b*e**E) = _logistic(E +
+    ln b)``; splitting on the sign of ``x`` keeps ``math.exp`` bounded so a
+    heavily-supported (large ``E``) or heavily-attacked node returns its
+    analytic limit rather than raising ``OverflowError``.
+    """
+    if x <= 0.0:
+        return 1.0 / (1.0 + math.exp(x))
+    enx = math.exp(-x)
+    return enx / (enx + 1.0)
+
+
 def seq_range_clause(
     params: list[object],
     seq_ranges: Sequence[SeqRange],
@@ -441,7 +456,13 @@ class _ReadMixin(_StoreShared):
                         attack += weighted
                 energy = support - attack
                 base = _BELIEF_STRENGTH_BASE
-                result = 1 - (1 - base * base) / (1 + base * math.exp(energy))
+                # Euler-based strength f(E) = 1 - (1-b^2)/(1 + b*e^E). Written
+                # via the logistic sigma so neither tail overflows: since
+                # 1/(1 + b*e^E) = sigma(-E - ln b), f(E) = 1 - (1-b^2)*sigma(...).
+                # Algebraically identical to the direct form wherever that form
+                # computes; where E is large enough to overflow ``math.exp`` it
+                # returns the analytic limit (f -> 1) instead of raising.
+                result = 1 - (1 - base * base) * _logistic(energy + math.log(base))
                 visiting.discard(node_id)
                 memo[node_id] = result
                 return result

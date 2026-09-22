@@ -20,10 +20,17 @@ class BeliefStrength:
     """
 
     strength: float
-    """Euler-based argumentation strength in ``[0, 1]``.
+    """Euler-based argumentation strength, neutral at ``0.5``.
 
-    ``0.5`` (the neutral base score every Belief/Experiment starts at) means
-    either no currently-true ``proves`` evidence exists, or its support and
-    attack exactly cancel. Above 0.5 means the graph leans toward the claim;
-    below means it leans against.
+    ``0.5`` (the neutral base score ``b`` every Belief/Experiment starts at)
+    means either no currently-true ``proves`` evidence exists, or its support
+    and attack exactly cancel. Above 0.5 means the graph leans toward the
+    claim; below means it leans against.
+
+    The range is ``[b**2, 1)`` -- with ``b = 0.5`` that is ``[0.25, 1)``, NOT
+    ``[0, 1]`` and NOT symmetric about 0.5. The floor ``b**2`` is intrinsic to
+    the Euler-based semantics (Amgoud & Ben-Naim, IJCAI 2018): an argument with
+    base weight ``b`` keeps residual credibility ``b**2`` that no amount of
+    attack drives to zero. Support pushes toward 1 (never reached); attack
+    pushes toward ``b**2``.
     """
