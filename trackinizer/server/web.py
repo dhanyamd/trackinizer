@@ -721,7 +721,7 @@ def _serve_admin_page(
         return redirect
     if identity is None or identity.role != "admin":
         raise HTTPException(status_code=403, detail="admin role required")
-    return FileResponse(page_path)
+    return _page_response(request, page_path)
 
 
 # When session auth is unconfigured (no ``session_secret`` on ``app.state.config``) the
@@ -736,7 +736,71 @@ def _serve_if_authed(
     redirect = _redirect_when_unauthed(request, identity)
     if redirect is not None:
         return redirect
-    return FileResponse(page_path)
+    return _page_response(request, page_path)
+
+
+# RFC 9110 section 15.4.5: a 304 carries the validators and cache directives the
+# 200 would have, and no body. ``Content-Length``/``Content-Type`` describe a body
+# that is not being sent, so they are dropped rather than copied.
+_REVALIDATION_HEADERS: Final = ("etag", "last-modified", "cache-control", "vary")
+
+
+def _page_response(request: Request, page_path: Path) -> Response:
+    """Serve ``page_path``, or 304 when the client's ``ETag`` still matches.
+
+    ``FileResponse`` already stamps an ``ETag`` and ``Last-Modified`` from the
+    file's stat, but nothing consulted the request's ``If-None-Match``, so a
+    browser holding a valid validator still received the whole page -- ~90 KB
+    per navigation across the SPA, console, graph, and admin pages. Honouring
+    the conditional turns that into an empty 304.
+
+    Args:
+      request: The incoming request, read for ``If-None-Match``.
+      page_path: The HTML asset to serve.
+
+    Returns:
+      response: A 304 when the validator matches, else the file itself.
+
+    """
+    # ``stat_result`` is passed so the validators are stamped NOW: left to compute
+    # them while sending, ``FileResponse`` leaves ``etag`` unset at construction
+    # and there is nothing here to compare against.
+    response = FileResponse(page_path, stat_result=page_path.stat())
+    etag = response.headers.get("etag")
+    if etag is not None and _etag_matches(request.headers.get("if-none-match"), etag):
+        headers = {
+            name: value
+            for name in _REVALIDATION_HEADERS
+            if (value := response.headers.get(name)) is not None
+        }
+        return Response(status_code=304, headers=headers)
+    return response
+
+
+def _etag_matches(if_none_match: str | None, etag: str) -> bool:
+    """Whether ``if_none_match`` lists ``etag``, per RFC 9110 section 13.1.2.
+
+    Comparison is WEAK: ``W/"x"`` and ``"x"`` name the same representation for
+    revalidation, so the prefix is stripped from both sides before comparing.
+    ``*`` matches any current representation.
+
+    Args:
+      if_none_match: Raw header value, or ``None`` when absent.
+      etag: The entity tag this response would carry.
+
+    Returns:
+      matched: True when the client already holds this representation.
+
+    """
+    if not if_none_match:
+        return False
+    if if_none_match.strip() == "*":
+        return True
+    weak = etag.removeprefix("W/")
+    return any(
+        candidate.strip().removeprefix("W/") == weak
+        for candidate in if_none_match.split(",")
+    )
 
 
 # Returns ``None`` when the caller is authed *or* when session auth is not configured on
