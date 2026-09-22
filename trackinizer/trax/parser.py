@@ -45,6 +45,7 @@ from trackinizer.trax.render import resolve_labels
 from trackinizer.types.inquiries import Inquiry
 from trackinizer.wire.filters import (
     FILTER_OPS,
+    REGEX_OPS,
     VALUELESS_FILTER_OPS,
     Filter,
     FilterOp,
@@ -155,7 +156,11 @@ def parse_list_query(
     for field, op, value in cli_filters:
         try:
             filters.append(
-                Filter(field=canonical_filter_field(field), op=op, value=value),
+                Filter(
+                    field=canonical_filter_field(field),
+                    op=op,
+                    value=_coerce_filter_value(field, op, value),
+                ),
             )
         except ValueError as err_obj:
             # ``Filter`` validates the whole clause -- length, regex dialect,
@@ -165,6 +170,43 @@ def parse_list_query(
             # surface as a traceback instead.
             raise ClientError(str(err_obj)) from err_obj
     return ListQuery(kinds=kinds_tuple, ranges=ranges, filters=tuple(filters))
+
+
+def _coerce_filter_value(field: str, op: FilterOp, value: str) -> str:
+    """Coerce a filter value the same way the write path coerces a set.
+
+    GRAMMAR.md section 1 promises that priorities and statuses are
+    case-insensitive and "canonicalised before comparison", and section 14
+    forbids a third outcome between matching a production and a named error.
+    Passing the raw token through delivered both: ``priority is high`` matched
+    nothing (the alias never became ``30``) and ``status is bogus`` returned an
+    empty set rather than the refusal the same value earns on a write. Routing
+    the value through the field's own coercer closes both, since ``_COERCE``
+    covers exactly the closed-set and typed columns.
+
+    Two ops opt out. A valueless op (``isnull``) carries no value to coerce,
+    and a regex op carries a PATTERN, not a value -- canonicalising ``PROV.*``
+    to a judgement literal would reject the very pattern the user meant.
+
+    Args:
+      field: CLI field name, before canonicalization to its storage column.
+      op: The filter operator, which decides whether coercion applies.
+      value: Raw token as typed.
+
+    Returns:
+      result: The coerced value, restringified for ``Filter.value``.
+
+    Raises:
+      ValueError: The coercer refused the value; the caller turns this into
+        the same ``ClientError`` every other filter refusal produces.
+
+    """
+    if op in VALUELESS_FILTER_OPS or op in REGEX_OPS:
+        return value
+    spec = FIELDS_BY_NAME.get(field)
+    if spec is None:
+        return value
+    return str(spec.coerce(value))
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
