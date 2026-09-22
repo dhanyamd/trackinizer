@@ -50,7 +50,7 @@ from trackinizer.wire.wire_sessions import (
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Iterator, Sequence
     from pathlib import Path
     from types import TracebackType
 
@@ -266,6 +266,23 @@ class FakeClient:
             },
         ]
         self.cost_payload: dict[str, float] = {"agent_usd": 1.0, "resource_usd": 2.0}
+        self.session_hits: dict[str, object] = {
+            "hits": [
+                {
+                    "session_id": str(self.target_id),
+                    "part": 0,
+                    "idx": 3,
+                    "field": "content",
+                    "chunk": 0,
+                    "score": 0.0164,
+                    "source": "both",
+                    "snippet": "advisory lock acquired",
+                    "title": "deploy log",
+                },
+            ],
+            "semantic": True,
+            "degraded": False,
+        }
         self.next_payload: dict[str, object] | None = {
             "id": str(self.target_id),
             "kind": "Issue",
@@ -368,9 +385,16 @@ class FakeClient:
         items: Sequence[tuple[Inquiry.InquiryKind, object]],
         *,
         edges: Sequence[object] = (),
+        actor: Inquiry.Actor | None = None,
     ) -> list[uuid.UUID]:
         """Submit batch."""
-        self.calls.append(("submit_batch", (tuple(items),), {"edges": tuple(edges)}))
+        self.calls.append(
+            (
+                "submit_batch",
+                (tuple(items),),
+                {"edges": tuple(edges), "actor": actor},
+            ),
+        )
         # One distinct id per item so callers can map inline targets back.
         return [self.target_id if i == 0 else uuid.uuid4() for i in range(len(items))]
 
@@ -542,10 +566,36 @@ class FakeClient:
         self.calls.append(("strength_for", (target_id,), {}))
         return self.strength_payload
 
+    def claim_next_issue(
+        self,
+        *,
+        owner: Inquiry.Actor,
+        actor: Inquiry.Actor | None = None,
+        reason: str = "",
+    ) -> dict[str, JSONValue] | None:
+        """Record a claim; the fake hands back its canned next-issue row."""
+        self.calls.append(
+            (
+                "claim_next_issue",
+                (),
+                {"owner": owner, "actor": actor, "reason": reason},
+            ),
+        )
+        return cast(
+            dict[str, JSONValue] | None,
+            self.next_payload,  # -- fake payload is JSON-shaped.
+        )
+
     def version(self) -> str:
         """Version."""
         self.calls.append(("version", (), {}))
         return "testsha"
+
+    def export(self) -> Iterator[str]:
+        """Two canned export lines: a header and one row."""
+        self.calls.append(("export", (), {}))
+        yield '{"format":"trackinizer-export","version":1,"migrations":[]}'
+        yield '{"table":"inquiries","row":{"title":"canned"}}'
 
     def wait_until_ready(
         self,
@@ -581,6 +631,19 @@ class FakeClient:
             list[dict[str, JSONValue]],
             cast(object, list(self.changes)),  # -- fake changes are JSON-shaped.
         )
+
+    def search_sessions(
+        self,
+        query: str,
+        *,
+        semantic: bool = True,
+        limit: int = 20,
+    ) -> dict[str, JSONValue]:
+        """Search sessions."""
+        self.calls.append(
+            ("search_sessions", (query,), {"semantic": semantic, "limit": limit}),
+        )
+        return cast("dict[str, JSONValue]", cast(object, dict(self.session_hits)))
 
     def cost_for(self, target_id: uuid.UUID, *, deep: bool = False) -> dict[str, float]:
         """Cost for."""
