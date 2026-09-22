@@ -20,6 +20,7 @@ GET  /api/inquiries/next_issue
 GET  /api/inquiries/<uuid>/proves_belief
 GET  /api/inquiries/<uuid>/confidence
 GET  /api/inquiries/<uuid>/authority
+GET  /api/inquiries/<uuid>/evidence
 POST /api/inquiries/lookup
 ```
 

@@ -7,6 +7,13 @@ All notable trackinizer changes are documented here. This project follows
 
 ### Added
 
+- Ranked evidence: `trax evidence KIND SEQ`, `GET /api/inquiries/{id}/evidence`,
+  and `Client.evidence_for` rank a Belief/Experiment's currently-true `proves`
+  citations by their contribution to the derived-confidence fold
+  (`citer_confidence * valence`), ordered by absolute magnitude -- a disproof
+  is as load-bearing as a proof. The fold's own math with its summands exposed
+  (no new weights, no grades), so a claim page or a verifier can see which
+  citations actually carry it.
 - Derived belief confidence: `trax confidence KIND SEQ`, `GET
   /api/inquiries/{id}/confidence`, and `Client.confidence_for` fold a
   Belief/Experiment's currently-true `proves` citations into a log-odds sum and

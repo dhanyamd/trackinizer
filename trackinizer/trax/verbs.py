@@ -2579,6 +2579,98 @@ Options:
             echo(f"{column.removesuffix('_authority'):10} {score:.6f}")
 
 
+class Evidence(Command):
+    """Show a claim's load-bearing evidence ranked by fold contribution."""
+
+    names = ("evidence",)
+    help = """\
+Usage: trax evidence KIND SEQ [OPTIONS]
+
+Examples:
+  trax evidence belief 1                       rank this belief's citations
+  trax evidence belief 1 --top 3               only the three strongest
+  trax evidence experiment 2 --format json     print JSON
+
+Notes:
+  Each citation's contribution is citer_confidence * valence -- the exact
+  summand the derived-confidence fold feeds its log-odds sum -- so this
+  ranking IS that model with its summands exposed, not a new scoring rule.
+  Ranked by absolute magnitude: a disproof is as load-bearing as a proof.
+  Only currently-true citations count (proven Belief citers, complete
+  Experiments, active Artifacts). Read-only: it never writes stored fields.
+
+Values:
+  kinds: belief experiment (only these carry inbound proves citations)
+
+Options:
+  --top INT    show only the N strongest citations (default: all)
+  --format text|json
+"""
+
+    @classmethod
+    @override
+    def make_parser(cls) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser(prog="trax evidence", description=cls.__doc__)
+        parser.add_argument("kind", choices=list(KIND_LOWER), type=str.lower)
+        parser.add_argument("seq", type=int)
+        parser.add_argument("--top", type=int, default=0)
+        parser.add_argument(
+            "--format",
+            dest="format_",
+            default="text",
+            choices=("text", "json"),
+        )
+        return parser
+
+    @classmethod
+    @override
+    def run(
+        cls,
+        verb: str,
+        args: argparse.Namespace,
+        client_factory: Callable[[], Client],
+    ) -> None:
+        del verb
+        client = client_factory()
+        ref = SeqRef(kind=KIND_LOWER[_arg_str(args, "kind")], seq=_arg_int(args, "seq"))
+        _, target_id = client.resolve_id(ref)
+        body = client.evidence_for(target_id)
+        top = _arg_int(args, "top")
+        if _arg_str(args, "format_") == "json":
+            shown = dict(body)
+            if top > 0:
+                shown["citations"] = cast(
+                    "list[object]",
+                    cast(dict[str, object], body).get("citations", []),
+                )[:top]
+            echo(render.format_json(shown), nl=False)
+            return
+        echo(
+            f"Evidence for {ref.kind}#{ref.seq}"
+            f" · {cast(str, cast(dict[str, object], body).get('title', ''))}",
+        )
+        echo(f"derived confidence {cast(float, body['confidence']):.6f}")
+        citations = cast(
+            "list[dict[str, object]]",
+            cast(dict[str, object], body).get("citations", []),
+        )
+        if top > 0:
+            citations = citations[:top]
+        if not citations:
+            echo("(no load-bearing evidence yet)")
+            return
+        echo("")
+        for citation in citations:
+            echo(
+                f"{cast(float, citation['contribution']):+8.3f}"
+                f"   val {cast(float, citation['valence']):+5.2f}"
+                f"   conf {cast(float, citation['citer_confidence']):4.2f}"
+                f"   {cast(str, citation['kind'])}#{cast(int, citation['seq'])}"
+                f" · {cast(str, citation['title'])}"
+                f" [{cast(str, citation['status'])}]",
+            )
+
+
 class Send(Command):
     """Send a message into a live agent session by routing name."""
 

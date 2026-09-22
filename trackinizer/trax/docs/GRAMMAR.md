@@ -433,7 +433,7 @@ flags documented here.
 
 ```
 verb_name   ::= "help" | "profile" | "next" | "recent"
-             |  "cost" | "confidence" | "authority" | "blocked" | "board"
+             |  "cost" | "confidence" | "authority" | "evidence" | "blocked" | "board"
              |  "graph" | "id" | "version" | "export" | "send" | "run"
              |  "search-sessions"
 ```
@@ -461,6 +461,12 @@ kinds resolve first, so a field can never shadow a command.
   exists to close.
 - `trax recent [--limit INT] [--format text|json]` -- audit-log feed.
 - `trax cost KIND SEQ [--deep] [--format text|json]` -- cost rollup.
+- `trax evidence KIND SEQ [--top INT] [--format text|json]` -- rank a
+  Belief/Experiment's currently-true `proves` citations by their contribution
+  to the derived-confidence fold (`citer_confidence * valence`, ranked by
+  absolute magnitude: a disproof is as load-bearing as a proof). `--top INT`
+  shows only the N strongest. Read-only: the fold's own math with its
+  summands exposed, never a separate scoring rule.
 - `trax blocked` -- active Issues with at least one active blocker.
 - `trax board [--width INT]` -- Issues grouped by status.
 - `trax graph [--open-only]` -- dependency tree.

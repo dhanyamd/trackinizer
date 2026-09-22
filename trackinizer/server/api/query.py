@@ -355,6 +355,54 @@ async def authority_route(
     return _require_found(await get_store(request).authority_for(target_id))
 
 
+@router.get("/api/inquiries/{target_id}/evidence")
+async def evidence_route(
+    target_id: uuid.UUID,
+    request: Request,
+    identity: Annotated[AuthIdentity, Depends(require_role("viewer"))],
+) -> MutableJSON:
+    """Return a claim's load-bearing evidence ranked by fold contribution.
+
+    Each citation's ``contribution`` is ``citer_confidence * valence`` -- the
+    exact summand the derived-confidence fold feeds its log-odds sum -- so the
+    ranking is the accepted model with its summands exposed, ranked by absolute
+    magnitude (a disproof is as load-bearing as a proof). 404 when the target
+    is absent or a non-claimable kind, mirroring ``/confidence``.
+
+    Args:
+      target_id: Belief or Experiment row id whose evidence to rank.
+      request: FastAPI request object for middleware access.
+      identity: Authenticated user identity, viewer-role-gated.
+
+    Returns:
+      body: ``{"target_id", "confidence", "citations": [...]}`` ranked by
+        absolute contribution.
+
+    """
+    del identity
+    report = await get_store(request).evidence_for(target_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return {
+        "target_id": str(report.target_id),
+        "title": report.title,
+        "confidence": report.derived_confidence,
+        "citations": [
+            {
+                "id": str(c.citer_id),
+                "kind": c.kind,
+                "seq": c.seq,
+                "title": c.title,
+                "status": c.status,
+                "valence": c.valence,
+                "citer_confidence": c.citer_confidence,
+                "contribution": c.contribution,
+            }
+            for c in report.citations
+        ],
+    }
+
+
 @router.get("/api/inquiries/{kind}/{seq}")
 async def by_seq_route(
     kind: Inquiry.InquiryKind,

@@ -722,6 +722,24 @@ class Client:
         where = f"/api/inquiries/{target_id}/authority"
         return cast(dict[str, float], _require_mapping(self.get(where), where))
 
+    def evidence_for(self, target_id: uuid.UUID) -> dict[str, JSONValue]:
+        """Fetch a claim's load-bearing evidence ranked by fold contribution.
+
+        Each citation's ``contribution`` is ``citer_confidence * valence`` --
+        the exact summand the derived-confidence fold feeds its log-odds sum --
+        so the ranking is the accepted model with its summands exposed.
+
+        Args:
+          target_id: Belief or Experiment ID whose evidence to rank.
+
+        Returns:
+          body: ``{"target_id", "confidence", "citations": [...]}`` with
+            citations ranked by absolute contribution.
+
+        """
+        where = f"/api/inquiries/{target_id}/evidence"
+        return _require_mapping(self.get(where), where)
+
     # -- Writes.
 
     def submit(

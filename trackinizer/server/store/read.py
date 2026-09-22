@@ -8,6 +8,7 @@ A pure leaf: :meth:`get_inquiry`, :meth:`list_kind`, :meth:`next_issue`,
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 from uuid import UUID
 
@@ -102,6 +103,56 @@ def seq_range_clause(
         # The wire rejects bare ``..``, so ``bounds`` is never empty.
         disjuncts.append("(" + " AND ".join(bounds) + ")")
     return "(" + " OR ".join(disjuncts) + ")"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class EvidenceCitation:
+    """One load-bearing citation of a claim, with its fold contribution.
+
+    Attributes:
+      citer_id: The citing row's id.
+      kind: The citing row's kind (Paper, Experiment, Belief, ...).
+      seq: The citing row's per-kind sequence number.
+      title: The citing row's title.
+      status: The citing row's lifecycle status.
+      valence: The signed ``proves`` weight in ``[-1, 1]``.
+      citer_confidence: The citing node's own derived confidence -- ``1.0``
+        for a non-claimable Artifact, the recursed fold for a
+        Belief/Experiment citer.
+      contribution: ``citer_confidence * valence`` -- the exact summand this
+        citation contributes to the target's derived-confidence log-odds.
+
+    """
+
+    citer_id: UUID
+    kind: str
+    seq: int
+    title: str
+    status: str
+    valence: float
+    citer_confidence: float
+    contribution: float
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class EvidenceReport:
+    """A claim's currently-true load-bearing evidence, ranked.
+
+    Attributes:
+      target_id: The scored Belief/Experiment row.
+      title: The scored row's title, for display headers.
+      derived_confidence: The claim's own derived confidence -- the logistic
+        of the summed contributions, identical to :meth:`confidence_for`.
+      citations: One :class:`EvidenceCitation` per currently-true ``proves``
+        edge, ranked by absolute contribution (a disproof is as load-bearing
+        as a proof), ties broken by the citer's ``seq``.
+
+    """
+
+    target_id: UUID
+    title: str
+    derived_confidence: float
+    citations: tuple[EvidenceCitation, ...]
 
 
 class _ReadMixin(_StoreShared):
@@ -461,6 +512,74 @@ class _ReadMixin(_StoreShared):
         return {
             key: cast(float, value) for key, value in row.items() if value is not None
         }
+
+    async def evidence_for(self, target_id: UUID) -> EvidenceReport | None:
+        """Rank a claim's currently-true ``proves`` citations by contribution.
+
+        Each citation's contribution is ``citer_confidence * valence`` -- the
+        exact summand :meth:`confidence_for` feeds its log-odds sum -- so the
+        ranking IS the derived-confidence model with the summands exposed:
+        no new weights, no grades, nothing asserted. Ranked by absolute
+        magnitude, since a disproof is as load-bearing as a proof.
+
+        Args:
+          target_id: Belief or Experiment row id whose evidence to rank.
+
+        Returns:
+          report: The ranked :class:`EvidenceReport`, or None when
+            ``target_id`` is absent or a non-claimable kind (the same kinds
+            :meth:`confidence_for` scores).
+
+        """
+        async with self.engine.acquire() as conn:
+            target = await conn.fetchrow(
+                "SELECT kind, title FROM inquiries WHERE id = $1",
+                target_id,
+            )
+            if target is None or target["kind"] not in _CLAIMABLE_KINDS:
+                return None
+            rows = await conn.fetch(PROVING_EDGES_SQL, target_id)
+            # One shared memo across every citer: the citers of one claim are
+            # the first hop of one walk, so they share the memo a single
+            # confidence walk would have built.
+            memo: dict[UUID, float] = {}
+            visiting: set[UUID] = set()
+            citations: list[EvidenceCitation] = []
+            log_odds = 0.0
+            for edge in rows:
+                from_id = cast(UUID, edge["from_id"])
+                valence = cast(float, edge["valence"])
+                citer_confidence = (
+                    await self._node_confidence(
+                        conn,
+                        from_id,
+                        memo=memo,
+                        visiting=visiting,
+                    )
+                    if edge["from_kind"] in _CLAIMABLE_KINDS
+                    else 1.0
+                )
+                contribution = citer_confidence * valence
+                log_odds += contribution
+                citations.append(
+                    EvidenceCitation(
+                        citer_id=from_id,
+                        kind=cast(str, edge["from_kind"]),
+                        seq=cast(int, edge["from_seq"]),
+                        title=cast(str, edge["from_title"]),
+                        status=cast(str, edge["from_status"]),
+                        valence=valence,
+                        citer_confidence=citer_confidence,
+                        contribution=contribution,
+                    ),
+                )
+        citations.sort(key=lambda c: (-abs(c.contribution), c.seq))
+        return EvidenceReport(
+            target_id=target_id,
+            title=cast(str, target["title"]),
+            derived_confidence=fold_confidence(log_odds),
+            citations=tuple(citations),
+        )
 
     async def what_changed_for_me(
         self,

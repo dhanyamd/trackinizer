@@ -218,7 +218,7 @@ def test_derived_read_routes_are_registered_and_documented() -> None:
     """
     registered = registered_paths(app)
     api_md = (_CWD.parents[1] / "docs" / "api.md").read_text()
-    for suffix in ("confidence", "authority"):
+    for suffix in ("confidence", "authority", "evidence"):
         path = f"/api/inquiries/{{target_id}}/{suffix}"
         assert path in registered, f"{suffix} route not registered"
         assert f"/api/inquiries/<uuid>/{suffix}" in api_md, f"{suffix} not in api.md"

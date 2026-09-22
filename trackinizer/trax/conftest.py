@@ -268,6 +268,12 @@ class FakeClient:
         self.cost_payload: dict[str, float] = {"agent_usd": 1.0, "resource_usd": 2.0}
         self.confidence_payload: float = 0.5
         self.authority_payload: dict[str, float] = {"proves_authority": 0.42}
+        self.evidence_payload: dict[str, JSONValue] = {
+            "target_id": str(self.target_id),
+            "title": "fake title",
+            "confidence": 0.5,
+            "citations": [],
+        }
         self.session_hits: dict[str, object] = {
             "hits": [
                 {
@@ -655,6 +661,11 @@ class FakeClient:
         """Record an authority query; the fake reports fixed scores."""
         self.calls.append(("authority_for", (target_id,), {}))
         return dict(self.authority_payload)
+
+    def evidence_for(self, target_id: uuid.UUID) -> dict[str, JSONValue]:
+        """Record an evidence query; the fake reports a fixed report body."""
+        self.calls.append(("evidence_for", (target_id,), {}))
+        return dict(self.evidence_payload)
 
     def edit(
         self,
