@@ -16,6 +16,7 @@ import pytest
 from trackinizer.types.reliability import (
     Citation,
     chisq_sf,
+    claim_taus,
     reliability_fixed_point,
     temporal_weight,
 )
@@ -233,3 +234,38 @@ def test_a_lone_claim_cannot_move_its_source_by_recency() -> None:
         ],
     )
     assert weights[fresh] == pytest.approx(weights[stale], abs=1e-9)
+
+
+# -- conflict-conditioned recency (claim_taus) ---------------------------------
+
+
+def test_claim_taus_agreement_is_never_taxed() -> None:
+    """Same-sign citations, however old: every tau is exactly 1.0."""
+    assert claim_taus([(0.0, 0.7), (500.0, 0.7), (1e9, 0.7)]) == [1.0, 1.0, 1.0]
+
+
+def test_claim_taus_decay_only_the_stale_side_of_a_dispute() -> None:
+    """A newer opposite-sign citation decays the older one, not itself."""
+    taus = claim_taus([(0.0, 0.7), (730.0 * 86400.0, -0.9)])
+    assert taus[0] == 1.0                     # last word counts fully
+    assert taus[1] == pytest.approx(0.25)     # two half-lives
+
+
+def test_claim_taus_equal_ages_cannot_conflict() -> None:
+    """No citation is strictly newer, so nothing is decayed."""
+    assert claim_taus([(100.0, 0.7), (100.0, -0.9)]) == [1.0, 1.0]
+
+
+def test_claim_taus_neutral_valence_cannot_conflict() -> None:
+    assert claim_taus([(0.0, 0.0), (500.0, -0.9)]) == [1.0, 1.0]
+
+
+def test_claim_taus_last_word_on_each_side_counts_fully() -> None:
+    """Three-way: the freshest attack decays BOTH older supports, and itself
+    counts fully -- there is nothing newer to contradict it."""
+    taus = claim_taus(
+        [(800.0 * 86400.0, 0.8), (400.0 * 86400.0, 0.7), (0.0, -0.9)],
+    )
+    assert taus[2] == 1.0                  # freshest overall: untouched
+    assert taus[0] < taus[1] < 1.0         # older supports, both contradicted
+                                          # later; more stale, more decayed

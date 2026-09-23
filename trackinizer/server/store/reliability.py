@@ -28,8 +28,8 @@ from trackinizer.server.store.shared import _StoreShared
 from trackinizer.server.values import vetted_sql
 from trackinizer.types.reliability import (
     Citation,
+    claim_taus,
     reliability_fixed_point,
-    temporal_weight,
 )
 
 
@@ -71,27 +71,42 @@ class _ReliabilityMixin(_StoreShared):
     async def _recompute_reliability(self, conn: Conn) -> int:
         """Load the matrix, iterate, and write the column in one transaction."""
         rows = await conn.fetch(RELIABILITY_EDGES_SQL)
-        # Recency is measured against the newest citation ON EACH CLAIM, so the
-        # temporal weight is deterministic (no wall-clock dependence) and a
-        # claim whose evidence all arrived together is untouched: every age is
-        # zero and every tau is exactly 1.0.
+        # Recency is measured against the newest evidence ON EACH CLAIM
+        # (deterministic, no wall-clock dependence) and cuts only citations a
+        # newer citation contradicts (claim_taus): agreement is never taxed
+        # for its age, so a claim without sign opposition gets uniform taus.
+        by_claim: dict[UUID, list[tuple[int, float]]] = {}
+        for index, row in enumerate(rows):
+            claim_id = cast(UUID, row["to_id"])
+            by_claim.setdefault(claim_id, []).append((index, cast(float, row["valence"])))
         newest_by_claim: dict[UUID, datetime] = {}
         for row in rows:
             claim_id = cast(UUID, row["to_id"])
             created = cast(datetime, row["evidence_date"])
             if claim_id not in newest_by_claim or created > newest_by_claim[claim_id]:
                 newest_by_claim[claim_id] = created
+        tau_by_index: dict[int, float] = {}
+        for claim_id, members in by_claim.items():
+            taus = claim_taus(
+                [
+                    (
+                        (newest_by_claim[claim_id]
+                         - cast(datetime, rows[index]["evidence_date"])).total_seconds(),
+                        valence,
+                    )
+                    for index, valence in members
+                ],
+            )
+            for (index, _valence), tau in zip(members, taus, strict=True):
+                tau_by_index[index] = tau
         citations = [
             Citation(
                 source=cast(UUID, row["from_id"]),
                 claim=cast(UUID, row["to_id"]),
                 valence=cast(float, row["valence"]),
-                tau=temporal_weight(
-                    (newest_by_claim[cast(UUID, row["to_id"])]
-                     - cast(datetime, row["evidence_date"])).total_seconds(),
-                ),
+                tau=tau_by_index[index],
             )
-            for row in rows
+            for index, row in enumerate(rows)
         ]
         weights = reliability_fixed_point(citations)
         async with tx(conn):

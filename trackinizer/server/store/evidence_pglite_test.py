@@ -199,11 +199,12 @@ async def test_belief_citer_contributes_its_own_folded_confidence(store: Store) 
 
 @pytest.mark.db_pglite
 @pytest.mark.asyncio(loop_scope="session")
-async def test_equal_valence_ranks_the_fresher_citation_first(store: Store) -> None:
-    """Same valence, different recording times: the newer citation ranks higher.
+async def test_equal_valence_is_corroboration_and_never_decayed(store: Store) -> None:
+    """Same valence, different ages: agreement, so neither is decayed.
 
-    This is the temporal term visible in the ranking -- the contributions differ
-    only by the sub-second age gap between the two edge writes.
+    Recency only cuts citations a newer one CONTRADICTS; same-sign citations
+    corroborate whatever their age, so both decay weights are 1.0 and the
+    contributions tie exactly (seq breaks the tie).
     """
     claim = await _proven_belief(store, "Claim with two equal voices")
     older = await _paper(store, "Older paper")
@@ -213,10 +214,44 @@ async def test_equal_valence_ranks_the_fresher_citation_first(store: Store) -> N
             from_id=paper, to_id=claim, edge_kind="proves", actor="tester",
             valence=0.5,
         )
+    async with store.engine.acquire() as conn:
+        await conn.execute(
+            "UPDATE inquiries SET paper_publish_date = "
+            "clock_timestamp() - make_interval(days => 400) WHERE id = ANY($1::uuid[])",
+            [older, newer],
+        )
     report = await store.evidence_for(claim)
     assert report is not None
-    assert [c.seq for c in report.citations] == [2, 1]
-    assert report.citations[0].decay >= report.citations[1].decay
+    assert [c.seq for c in report.citations] == [1, 2]
+    assert all(c.decay == 1.0 for c in report.citations)
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_stale_support_yields_to_a_fresh_attack(store: Store) -> None:
+    """A newer contradicting citation decays the older one by its age gap."""
+    claim = await _proven_belief(store, "Claim with a dispute")
+    old_support = await _paper(store, "Old supporter")
+    fresh_attack = await _paper(store, "Fresh attacker")
+    await store.add_edge(
+        from_id=old_support, to_id=claim, edge_kind="proves", actor="tester",
+        valence=0.7,
+    )
+    await store.add_edge(
+        from_id=fresh_attack, to_id=claim, edge_kind="proves", actor="tester",
+        valence=-0.9,
+    )
+    async with store.engine.acquire() as conn:
+        await conn.execute(
+            "UPDATE inquiries SET paper_publish_date = "
+            "clock_timestamp() - make_interval(days => 730) WHERE id = $1",
+            old_support,
+        )
+    report = await store.evidence_for(claim)
+    assert report is not None
+    by_citer = {c.citer_id: c for c in report.citations}
+    assert by_citer[old_support].decay == pytest.approx(0.25, abs=0.01)
+    assert by_citer[fresh_attack].decay == 1.0
 
 
 @pytest.mark.db_pglite

@@ -17,6 +17,7 @@ from trackinizer.lib.postgres.testing import reset_schema
 from trackinizer.server.embedders.stub import StubEmbedder
 from trackinizer.server.store.core import Store
 from trackinizer.types.belief_confidence import fold_confidence
+from trackinizer.types.belief_confidence import NEUTRAL_CONFIDENCE
 from trackinizer.wire.bodies import SubmitBelief, SubmitPaper
 
 
@@ -163,11 +164,12 @@ async def _publish(store: Store, paper: UUID, days_ago: int) -> None:
 
 @pytest.mark.db_pglite
 @pytest.mark.asyncio(loop_scope="session")
-async def test_newer_papers_outweigh_older_ones(store: Store) -> None:
-    """Recency in the store: an old paper's citation counts less than a new one's.
+async def test_agreement_is_never_taxed_for_its_age(store: Store) -> None:
+    """Two agreeing papers of different ages count equally.
 
-    Same claim, same valence, only the PUBLICATION DATES differ -- which is the
-    anchor (a 2019 paper cited yesterday is old evidence, not new).
+    Recency arbitrates DISPUTES, it does not tax age: same-sign citations are
+    corroboration, however old, so both decay weights are exactly 1.0 and the
+    contributions tie (seq breaks the tie).
     """
     claim = await _belief(store, "Claim with an old and a new supporter")
     old_paper = await _paper(store, "Old survey (2019)")
@@ -179,10 +181,45 @@ async def test_newer_papers_outweigh_older_ones(store: Store) -> None:
 
     report = await store.evidence_for(claim)
     assert report is not None
-    newest, oldest = report.citations[0], report.citations[-1]
-    assert newest.decay == pytest.approx(1.0)
-    assert oldest.decay == pytest.approx(0.25, abs=0.01)  # two half-lives
-    assert newest.contribution > oldest.contribution
+    assert all(c.decay == 1.0 for c in report.citations)
+    assert [c.seq for c in report.citations] == [1, 2]
     assert report.derived_confidence == pytest.approx(
         await store.confidence_for(claim),
     )
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_recency_arbitrates_disputes_only(store: Store) -> None:
+    """The fresh side of a dispute counts fully; the stale side decays.
+
+    Old paper supports, newer paper contradicts: the OLD support is decayed by
+    its age (a newer opposite-sign citation exists), while the fresh attack
+    counts at full weight. Reversing the dates flips the decay.
+    """
+    claim = await _belief(store, "Contested claim")
+    old_supporter = await _paper(store, "Old supporter (2019)")
+    fresh_critic = await _paper(store, "Fresh critic (2026)")
+    await _proves(store, old_supporter, claim, 0.7)
+    await _proves(store, fresh_critic, claim, -0.9)
+    await _publish(store, old_supporter, 730)
+    await _publish(store, fresh_critic, 0)
+
+    report = await store.evidence_for(claim)
+    assert report is not None
+    decayed = {c.citer_id: c.decay for c in report.citations}
+    assert decayed[old_supporter] < 1.0      # stale side of the dispute
+    assert decayed[fresh_critic] == 1.0      # last word counts fully
+
+    # The identical claim with the dates swapped: the attack goes stale and
+    # the support counts fully, so confidence rises above neutral.
+    claim2 = await _belief(store, "Same dispute, dates swapped")
+    old_critic2 = await _paper(store, "Old critic (2019)")
+    fresh_supporter2 = await _paper(store, "Fresh supporter (2026)")
+    await _proves(store, fresh_supporter2, claim2, 0.7)
+    await _proves(store, old_critic2, claim2, -0.9)
+    await _publish(store, fresh_supporter2, 0)
+    await _publish(store, old_critic2, 730)
+    report2 = await store.evidence_for(claim2)
+    assert report2 is not None
+    assert report2.derived_confidence > NEUTRAL_CONFIDENCE

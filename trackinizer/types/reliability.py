@@ -51,6 +51,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "HALF_LIFE_SECONDS",
+    "claim_taus",
     "MAX_ITERATIONS",
     "NEUTRAL_TRUTH",
     "TOLERANCE",
@@ -192,6 +193,56 @@ def chisq_sf(x: float, df: float) -> float:
         if abs(delta - 1.0) < _EPS:
             break
     return max(0.0, min(1.0, math.exp(ln_prefactor) * h))
+
+
+def claim_taus(
+    citations: Sequence[tuple[float, float]],
+    *,
+    half_life: float = HALF_LIFE_SECONDS,
+) -> list[float]:
+    """Per-citation recency weights for ONE claim, cutting only in disputes.
+
+    ``citations`` is ``(age_seconds, valence)`` per citation, age measured
+    against the newest evidence on the claim. A citation is decayed ONLY when
+    some NEWER citation on the same claim argues the opposite side (the
+    product of the valences is negative); otherwise it counts in full:
+
+        tau(c) = 0.5 ** (age(c) / half_life)   if a newer citation contradicts c
+               = 1.0                           otherwise
+
+    Recency arbitrates CONFLICT, it does not tax age: corroboration that
+    happens to be old counts in full, a claim whose evidence all agrees is
+    untouched whatever its age, and the side that spoke last on a dispute
+    always counts fully. The conflict predicate is sign opposition -- the
+    falsification store's own support/attack semantics -- so no threshold
+    constant enters. Neutral valences (0) cannot conflict.
+
+    Provenance, stated honestly: weighting evidence by conflict is the
+    Dempster-Shafer lineage (Deng et al. 2004 onward -- credibility weights
+    before combination); decaying observations by age is standard time-aware
+    truth discovery (Huang & Wang, IEEE MASS 2015). Conditioning the decay on
+    conflict is OUR composition of those two published ideas, not a formula
+    quoted verbatim from either; it is parameter-free apart from the shared
+    half-life, and it degenerates to the time-blind computation whenever a
+    claim has no sign opposition (all taus exactly 1.0).
+
+    Args:
+      citations: (age, valence) per citation of one claim, any order.
+      half_life: Seconds after which a disputed citation's weight halves.
+
+    Returns:
+      taus: One temporal weight in ``(0, 1]`` per citation, input order.
+
+    """
+    return [
+        temporal_weight(age, half_life=half_life)
+        if any(
+            other_age < age and other_valence * valence < 0
+            for other_age, other_valence in citations
+        )
+        else 1.0
+        for age, valence in citations
+    ]
 
 
 def reliability_fixed_point(

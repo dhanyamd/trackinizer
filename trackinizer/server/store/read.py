@@ -30,7 +30,7 @@ from trackinizer.server.sql_fragments import (
 from trackinizer.server.store.shared import _StoreShared
 from trackinizer.server.values import manifest_bound, vetted_sql
 from trackinizer.types.belief_confidence import NEUTRAL_CONFIDENCE, fold_confidence
-from trackinizer.types.reliability import temporal_weight
+from trackinizer.types.reliability import claim_taus
 from trackinizer.types.change_log import Change
 from trackinizer.types.cost import Cost
 from trackinizer.types.errors import NotFoundError
@@ -486,7 +486,21 @@ class _ReadMixin(_StoreShared):
             (cast(datetime, row["evidence_date"]) for row in proving),
             default=None,
         )
-        for row in proving:
+        # Recency arbitrates disputes only: a citation is decayed when some
+        # NEWER citation on this claim argues the opposite side, and counts in
+        # full otherwise (claim_taus). Agreement is never taxed for its age.
+        taus = claim_taus(
+            [
+                (
+                    (newest - cast(datetime, row["evidence_date"])).total_seconds()
+                    if newest is not None
+                    else 0.0,
+                    cast(float, row["valence"]),
+                )
+                for row in proving
+            ],
+        )
+        for row, tau in zip(proving, taus, strict=True):
             from_kind = cast(str, row["from_kind"])
             valence = cast(float, row["valence"])
             # The citing row's reliability weight, when the sweep has estimated
@@ -496,14 +510,6 @@ class _ReadMixin(_StoreShared):
                 cast(float, row["from_reliability"])
                 if row["from_reliability"] is not None
                 else 1.0
-            )
-            # Recency, measured against the newest evidence on this claim: the
-            # freshest citation counts fully, older ones decay by half-life.
-            # Every citation the same age -> tau = 1.0 -> time-blind fold.
-            tau = temporal_weight(
-                (newest - cast(datetime, row["evidence_date"])).total_seconds()
-                if newest is not None
-                else 0.0,
             )
             citation_confidence = (
                 await self._node_confidence(
@@ -578,6 +584,19 @@ class _ReadMixin(_StoreShared):
                 (cast(datetime, row["evidence_date"]) for row in rows),
                 default=None,
             )
+            # Same rule as the fold: recency cuts only citations that a newer
+            # citation on this claim contradicts (claim_taus).
+            taus = claim_taus(
+                [
+                    (
+                        (newest - cast(datetime, row["evidence_date"])).total_seconds()
+                        if newest is not None
+                        else 0.0,
+                        cast(float, row["valence"]),
+                    )
+                    for row in rows
+                ],
+            )
             # One shared memo across every citer: the citers of one claim are
             # the first hop of one walk, so they share the memo a single
             # confidence walk would have built.
@@ -585,7 +604,7 @@ class _ReadMixin(_StoreShared):
             visiting: set[UUID] = set()
             citations: list[EvidenceCitation] = []
             log_odds = 0.0
-            for edge in rows:
+            for edge, decay in zip(rows, taus, strict=True):
                 from_id = cast(UUID, edge["from_id"])
                 valence = cast(float, edge["valence"])
                 reliability = (
@@ -602,11 +621,6 @@ class _ReadMixin(_StoreShared):
                     )
                     if edge["from_kind"] in _CLAIMABLE_KINDS
                     else 1.0
-                )
-                decay = temporal_weight(
-                    (newest - cast(datetime, edge["evidence_date"])).total_seconds()
-                    if newest is not None
-                    else 0.0,
                 )
                 contribution = reliability * citer_confidence * decay * valence
                 log_odds += contribution
