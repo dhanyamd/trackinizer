@@ -22,6 +22,7 @@ from trackinizer.types.columns import (
     storage_name,
 )
 from trackinizer.types.inquiries import INQUIRY_CLASSES
+from trackinizer.wire.filters import DERIVED_FILTER_COLUMNS
 from trackinizer.wire.session_record_fields import (
     SESSION_RECORD_FIELDS,
     record_kind_for,
@@ -356,6 +357,12 @@ def _column_shapes() -> dict[str, ColumnShape]:
     # ``session_records``. The SET is still derived (from which record classes
     # project any ``text``), so a new record class needs no edit here.
     out.update(dict.fromkeys(SESSION_RECORD_FIELDS, ColumnShape.SESSION_RECORD))
+    # System-written derived columns (DOUBLE PRECISION, no ColumnSpec), seeded
+    # for the same reason as the identity columns above: the spec walk cannot
+    # see them. REAL matches how the store's Python evaluator compares them
+    # (``compares_as_float``), and mirrors the authority columns, which carry
+    # the same type and no spec.
+    out.update(dict.fromkeys(DERIVED_FILTER_COLUMNS, ColumnShape.REAL))
     for source in INQUIRY_CLASSES:
         for name, flat in flat_column_specs(source).items():
             column = storage_name(name, flat.spec)

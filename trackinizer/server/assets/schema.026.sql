@@ -1,0 +1,22 @@
+-- schema.026.sql -- derived source reliability (truth-discovery fixed point).
+--
+-- Adds one nullable DOUBLE PRECISION column to ``inquiries``: the citing
+-- Artifact's estimated reliability, written by the background reliability
+-- sweep from the signed-valence ``proves`` citation matrix (see
+-- ``types/reliability.py``). NULL means "not yet computed"; the sweep writes a
+-- weight only for rows that currently cite at least one claim, and the
+-- confidence fold reads NULL as the uniform cold-start prior (1.0), so a
+-- fresh install behaves exactly like the pre-reliability build until the
+-- first sweep observes disagreement.
+--
+-- The baseline ``schema.sql`` carries the same column for a fresh install; a
+-- fresh DB records this migration applied WITHOUT executing it, an existing
+-- DB records the baseline unrun and executes only this file, so the two must
+-- stay in step -- pinned by ``schema_migration_test.py``.
+--
+-- Numbered 026: the deployed ledger holds through schema.025.sql.
+--
+-- Purely additive DDL into a column the old build never reads, safe against
+-- the OLD code and not downtime (run it against the live database with the
+-- old server still serving; see docs/db_schema_migration.md).
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS artifact_reliability DOUBLE PRECISION;

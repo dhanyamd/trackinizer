@@ -37,7 +37,7 @@ from trackinizer.types.inquiries import (
     Issue,
     Paper,
 )
-from trackinizer.wire.filters import Filter
+from trackinizer.wire.filters import DERIVED_FILTER_COLUMNS, FILTER_FIELD_ALIASES, Filter
 from trackinizer.wire.refs import Ref, SeqRef, UuidRef
 from trackinizer.wire.seq_ranges import SeqRange
 from trackinizer.wire.session_record_fields import SESSION_RECORD_FIELDS
@@ -908,6 +908,13 @@ def _filter_fields_cli(kind: Inquiry.InquiryKind) -> tuple[str, ...]:
     for spec in _FIELDS:
         if spec.filterable and spec.payload_key in canonical:
             names.add(spec.cli_name)
+    # Ergonomic spellings of the derived columns (``reliability`` ->
+    # ``artifact_reliability``), mirroring the aliases the server canonicalizes.
+    names.update(
+        alias
+        for alias, column in FILTER_FIELD_ALIASES.items()
+        if column in DERIVED_FILTER_COLUMNS
+    )
     if kind == "AgentSession":
         # IR record kinds, on the one kind that HAS records. Offering them on
         # an Issue would accept a clause whose subquery can never match, which
@@ -922,7 +929,7 @@ def _filter_fields_cli(kind: Inquiry.InquiryKind) -> tuple[str, ...]:
 def _filterable_columns(kind: Inquiry.InquiryKind) -> frozenset[str]:
     """Canonical SQL columns a filter may target for ``kind``."""
     cls = KIND_TO_CLASS[kind]
-    columns = set(_IDENTITY_FILTER_COLUMNS)
+    columns = set(_IDENTITY_FILTER_COLUMNS) | set(DERIVED_FILTER_COLUMNS)
     for column, flat in flat_column_specs(cls).items():
         applies = flat.spec.applies_to_inquiry_kinds
         if applies is None or kind in applies:

@@ -171,7 +171,8 @@ PROVING_EDGES_SQL: Final[str] = vetted_sql(
     # short-ref and title, so the projection carries them too; its only
     # consumers read named columns, so extra projections stay inert.
     "SELECT e.from_id, t.kind AS from_kind, e.valence, "
-    "       t.seq AS from_seq, t.title AS from_title, t.status AS from_status "
+    "       t.seq AS from_seq, t.title AS from_title, t.status AS from_status, "
+    "       t.artifact_reliability AS from_reliability "
     "FROM edges e "
     "JOIN inquiries t ON t.id = e.from_id "
     "WHERE e.edge_kind = 'proves' AND e.to_id = $1 "
@@ -190,6 +191,32 @@ PROVING_EDGES_SQL: Final[str] = vetted_sql(
 ``confidence_for`` folds each into a log-odds sum, recursing into any citer that
 is itself a Belief/Experiment so a chain resolves bottom-up (the ``proves``
 graph is a DAG). Drops citers an :class:`EdgeKindPolicy` flags currency-invalid.
+"""
+
+
+RELIABILITY_EDGES_SQL: Final[str] = vetted_sql(
+    # The same currency rule as PROVING_EDGES_SQL, but over the WHOLE proves
+    # matrix (no per-claim target): reliability is a global fixed point, so the
+    # sweep loads every currently-true citation in one query.
+    "SELECT e.from_id, e.to_id, e.valence FROM edges e "
+    "JOIN inquiries t ON t.id = e.from_id "
+    "WHERE e.edge_kind = 'proves' "
+    "  AND ("
+    "    (t.kind = 'Belief' AND t.belief_judgement = 'proven') "
+    "    OR (t.kind = 'Experiment' AND t.status = 'complete') "
+    "    OR (t.kind NOT IN ('Belief', 'Experiment') AND t.status = 'active')"
+    "  ) ",
+    _policy_exclude_clauses(
+        subject_alias="t.id",
+        policy_attr="invalidates_currency_on",
+    ),
+)
+"""Every currently-true ``proves`` citation, for the reliability fixed point.
+
+``recompute_reliability`` groups these by source and iterates the joint
+truth/reliability fixed point (:mod:`trackinizer.types.reliability`). Drops
+citations an :class:`EdgeKindPolicy` flags currency-invalid, so a superseded
+source stops voting exactly where the confidence fold stops counting it.
 """
 
 

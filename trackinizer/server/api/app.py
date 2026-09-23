@@ -36,6 +36,7 @@ from trackinizer.server.api import (
 from trackinizer.server.api.idempotency import ChangeIdMiddleware
 from trackinizer.server.auth import seed_no_auth_user
 from trackinizer.server.authority_sweep import authority_sweep_loop
+from trackinizer.server.reliability_sweep import reliability_sweep_loop
 from trackinizer.server.config import (
     Config,
     build_embedder,
@@ -160,6 +161,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Authority sweep: recomputes the derived load-bearing (PageRank)
         # columns off the request path, coalescing edge-change bursts.
         authority_task = asyncio.create_task(authority_sweep_loop(app.state.store))
+        # Reliability sweep: recomputes the derived truth-discovery reliability
+        # column off the request path, on the same edge-change poll.
+        reliability_task = asyncio.create_task(
+            reliability_sweep_loop(app.state.store),
+        )
         try:
             yield
         finally:
@@ -169,6 +175,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             authority_task.cancel()
             with suppress(asyncio.CancelledError):
                 await authority_task
+            reliability_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await reliability_task
             if warm_task is not None:
                 warm_task.cancel()
                 with suppress(asyncio.CancelledError):

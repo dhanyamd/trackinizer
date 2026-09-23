@@ -54,6 +54,7 @@ __all__ = [
     "FILTER_FIELD_ALIASES",
     "FILTER_OPS",
     "IDENTITY_COLUMNS",
+    "DERIVED_FILTER_COLUMNS",
     "MAX_FILTER_VALUE_CHARS",
     "NON_NULLABLE_COLUMNS",
     "ORDER_OPS",
@@ -309,6 +310,21 @@ IDENTITY_COLUMNS: Final[frozenset[str]] = frozenset(
 )
 
 
+# System-written derived columns: filterable like identity columns, but
+# NULLABLE (NULL = "not yet computed"), so presence ops stay legal on them
+# and they must NOT join IDENTITY_COLUMNS -- that set feeds the NON-NULL
+# derivation, and a notnull on a derived column is a legitimate question.
+DERIVED_FILTER_COLUMNS: Final[frozenset[str]] = frozenset(
+    {
+        "proves_authority",
+        "favors_authority",
+        "cited_by_authority",
+        "issue_authority",
+        "artifact_reliability",
+    },
+)
+
+
 # Derived from the column specs rather than hand-listed, so a future ``required=True``
 # field (or a new flattened axis) is covered automatically instead of silently breaking
 # presence-op validation. A column is NOT NULL when its spec is ``required``
@@ -388,6 +404,7 @@ FILTER_FIELD_ALIASES: Final[Mapping[str, str]] = {
     "subscriber": "subscribers",
     "agent-cost": "marginal_cost_agent_usd",
     "resource-cost": "marginal_cost_resource_usd",
+    "reliability": "artifact_reliability",
     **_kind_specific_aliases(),
 }
 

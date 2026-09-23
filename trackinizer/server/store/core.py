@@ -45,6 +45,7 @@ from trackinizer.server.store.edit import _EditMixin
 from trackinizer.server.store.export import _ExportMixin
 from trackinizer.server.store.metrics import _MetricsMixin
 from trackinizer.server.store.read import _ReadMixin
+from trackinizer.server.store.reliability import _ReliabilityMixin
 from trackinizer.server.store.session import _SessionMixin
 from trackinizer.server.store.session_ir import _SessionIRMixin
 from trackinizer.server.store.shared import _StoreShared
@@ -431,6 +432,7 @@ class Store(
     _LifecycleMixin,
     _ReadMixin,
     _AuthorityMixin,
+    _ReliabilityMixin,
     _ExportMixin,
     _MetricsMixin,
     _SessionMixin,

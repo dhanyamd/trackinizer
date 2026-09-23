@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS inquiries (
     favors_authority    DOUBLE PRECISION,
     cited_by_authority  DOUBLE PRECISION,
     issue_authority     DOUBLE PRECISION,
+    -- Derived source reliability (truth-discovery fixed point over the proves
+    -- matrix; types/reliability.py). System-written by the reliability sweep.
+    -- NULL means "not yet computed"; the confidence fold reads NULL as the
+    -- uniform cold-start prior, so a fresh install behaves like the
+    -- pre-reliability build until the first sweep observes disagreement.
+    artifact_reliability DOUBLE PRECISION,
     created        TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     modified       TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 

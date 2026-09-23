@@ -119,8 +119,11 @@ class EvidenceCitation:
       citer_confidence: The citing node's own derived confidence -- ``1.0``
         for a non-claimable Artifact, the recursed fold for a
         Belief/Experiment citer.
-      contribution: ``citer_confidence * valence`` -- the exact summand this
-        citation contributes to the target's derived-confidence log-odds.
+      reliability: The citing row's sweep-estimated truth-discovery weight,
+        ``1.0`` when not yet computed (the cold-start uniform prior).
+      contribution: ``reliability * citer_confidence * valence`` -- the exact
+        summand this citation contributes to the target's derived-confidence
+        log-odds.
 
     """
 
@@ -131,6 +134,7 @@ class EvidenceCitation:
     status: str
     valence: float
     citer_confidence: float
+    reliability: float
     contribution: float
 
 
@@ -410,9 +414,13 @@ class _ReadMixin(_StoreShared):
 
         Folds the currently-true ``proves`` graph into a log-odds sum and maps
         it through a logistic (see :mod:`trackinizer.types.belief_confidence`):
-        each citation contributes ``citation_confidence * valence``, recursing
-        into any citer that is itself a Belief/Experiment so a chain resolves
-        bottom-up. Neutral ``0.5`` when no currently-true evidence exists.
+        each citation contributes ``reliability * citation_confidence *
+        valence``, recursing into any citer that is itself a Belief/Experiment
+        so a chain resolves bottom-up. The reliability factor is the citing
+        row's sweep-estimated truth-discovery weight
+        (:mod:`trackinizer.types.reliability`); before the sweep has run it is
+        the uniform cold-start prior 1.0, which makes this the pre-reliability
+        fold exactly. Neutral ``0.5`` when no currently-true evidence exists.
         Purely derived and read-only -- it never writes the stored row.
 
         ``conn`` joins a caller's open transaction: PGlite's single connection
@@ -470,6 +478,14 @@ class _ReadMixin(_StoreShared):
         for row in await conn.fetch(PROVING_EDGES_SQL, node_id):
             from_kind = cast(str, row["from_kind"])
             valence = cast(float, row["valence"])
+            # The citing row's reliability weight, when the sweep has estimated
+            # one; NULL means "not yet computed", which reads as the uniform
+            # cold-start prior 1.0 -- the exact pre-reliability fold.
+            reliability = (
+                cast(float, row["from_reliability"])
+                if row["from_reliability"] is not None
+                else 1.0
+            )
             citation_confidence = (
                 await self._node_confidence(
                     conn,
@@ -480,7 +496,7 @@ class _ReadMixin(_StoreShared):
                 if from_kind in _CLAIMABLE_KINDS
                 else 1.0
             )
-            log_odds += citation_confidence * valence
+            log_odds += reliability * citation_confidence * valence
         visiting.discard(node_id)
         result = fold_confidence(log_odds)
         memo[node_id] = result
@@ -549,6 +565,11 @@ class _ReadMixin(_StoreShared):
             for edge in rows:
                 from_id = cast(UUID, edge["from_id"])
                 valence = cast(float, edge["valence"])
+                reliability = (
+                    cast(float, edge["from_reliability"])
+                    if edge["from_reliability"] is not None
+                    else 1.0
+                )
                 citer_confidence = (
                     await self._node_confidence(
                         conn,
@@ -559,7 +580,7 @@ class _ReadMixin(_StoreShared):
                     if edge["from_kind"] in _CLAIMABLE_KINDS
                     else 1.0
                 )
-                contribution = citer_confidence * valence
+                contribution = reliability * citer_confidence * valence
                 log_odds += contribution
                 citations.append(
                     EvidenceCitation(
@@ -570,6 +591,7 @@ class _ReadMixin(_StoreShared):
                         status=cast(str, edge["from_status"]),
                         valence=valence,
                         citer_confidence=citer_confidence,
+                        reliability=reliability,
                         contribution=contribution,
                     ),
                 )

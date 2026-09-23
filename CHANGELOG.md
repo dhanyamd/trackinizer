@@ -7,13 +7,27 @@ All notable trackinizer changes are documented here. This project follows
 
 ### Added
 
+- Derived source reliability: a background sweep estimates each citing
+  Artifact's reliability from the signed-valence `proves` citation matrix as a
+  chi-square-bounded truth-discovery fixed point
+  (`types/reliability.py`: iterate consensus truth and source weights; a
+  source's weight is the chi-square survival function of its own deviation
+  from consensus, so a sparse source is penalised softly rather than driven to
+  an extreme). Stored in the new nullable `artifact_reliability` column
+  (migration 026) and read back by the confidence fold, which now weights each
+  citation by `reliability * citer_confidence * valence`. Nobody sets the
+  weight -- no votes, no self-annotation, no grade table. NULL means "not yet
+  computed" and reads as the uniform prior 1.0, so a graph with no observed
+  disagreement folds exactly as before. `trax paper reliability lt 0.5` filters
+  on it through the existing grammar (the derived columns joined the filter
+  whitelist).
 - Ranked evidence: `trax evidence KIND SEQ`, `GET /api/inquiries/{id}/evidence`,
   and `Client.evidence_for` rank a Belief/Experiment's currently-true `proves`
   citations by their contribution to the derived-confidence fold
-  (`citer_confidence * valence`), ordered by absolute magnitude -- a disproof
-  is as load-bearing as a proof. The fold's own math with its summands exposed
-  (no new weights, no grades), so a claim page or a verifier can see which
-  citations actually carry it.
+  (`reliability * citer_confidence * valence`), ordered by absolute magnitude --
+  a disproof is as load-bearing as a proof. The fold's own math with its
+  summands exposed (no new weights, no grades), so a claim page or a verifier
+  can see which citations actually carry it.
 - Derived belief confidence: `trax confidence KIND SEQ`, `GET
   /api/inquiries/{id}/confidence`, and `Client.confidence_for` fold a
   Belief/Experiment's currently-true `proves` citations into a log-odds sum and

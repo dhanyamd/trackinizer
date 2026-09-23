@@ -2665,6 +2665,7 @@ Options:
                 f"{cast(float, citation['contribution']):+8.3f}"
                 f"   val {cast(float, citation['valence']):+5.2f}"
                 f"   conf {cast(float, citation['citer_confidence']):4.2f}"
+                f"   w {cast(float, citation['reliability']):4.2f}"
                 f"   {cast(str, citation['kind'])}#{cast(int, citation['seq'])}"
                 f" · {cast(str, citation['title'])}"
                 f" [{cast(str, citation['status'])}]",

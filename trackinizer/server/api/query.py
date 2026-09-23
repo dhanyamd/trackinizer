@@ -43,6 +43,7 @@ from trackinizer.types.inquiries import (
 )
 from trackinizer.wire.bodies import ClaimNextIssue, FieldMutation
 from trackinizer.wire.filters import (
+    DERIVED_FILTER_COLUMNS,
     IDENTITY_COLUMNS,
     VALUELESS_FILTER_OPS,
     Filter,
@@ -396,6 +397,7 @@ async def evidence_route(
                 "status": c.status,
                 "valence": c.valence,
                 "citer_confidence": c.citer_confidence,
+                "reliability": c.reliability,
                 "contribution": c.contribution,
             }
             for c in report.citations
@@ -596,7 +598,12 @@ def _filter_columns_for(kind: Inquiry.InquiryKind) -> frozenset[str]:
     # carry no ColumnSpec (their values live in ``session_records``), so the
     # spec walk cannot see them.
     records = SESSION_RECORD_FIELDS if kind == "AgentSession" else ()
-    return IDENTITY_COLUMNS | frozenset(declared) | frozenset(records)
+    return (
+        IDENTITY_COLUMNS
+        | DERIVED_FILTER_COLUMNS
+        | frozenset(declared)
+        | frozenset(records)
+    )
 
 
 # ``field`` may arrive as a CLI-friendly alias (``kind``, ``agent-cost``, ``result``,
