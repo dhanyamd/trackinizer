@@ -150,46 +150,39 @@ async def test_currency_invalidated_source_stops_voting(store: Store) -> None:
     await store.recompute_reliability()
     assert await _reliability_of(store, paper) is None
 
-async def _backdate(store: Store, source: UUID, claim: UUID, days: int) -> None:
-    """Age one citation by ``days`` so recency has something to measure."""
+async def _publish(store: Store, paper: UUID, days_ago: int) -> None:
+    """Set a paper's publication date, the recency anchor for its citations."""
     async with store.engine.acquire() as conn:
         await conn.execute(
-            "UPDATE edges SET created = created - make_interval(days => $3) "
-            "WHERE from_id = $1 AND to_id = $2",
-            source,
-            claim,
-            days,
+            "UPDATE inquiries SET paper_publish_date = "
+            "clock_timestamp() - make_interval(days => $2) WHERE id = $1",
+            paper,
+            days_ago,
         )
 
 
 @pytest.mark.db_pglite
 @pytest.mark.asyncio(loop_scope="session")
-async def test_stale_disagreement_weighs_less_than_fresh_agreement(store: Store) -> None:
-    """The store's recency term: a source is judged by its RECENT record.
+async def test_newer_papers_outweigh_older_ones(store: Store) -> None:
+    """Recency in the store: an old paper's citation counts less than a new one's.
 
-    Source X agrees on claim A and dissents on claim B. Backdating X's
-    agreement (making the agreement stale, the dissent fresh) must lower its
-    weight, and backdating the dissent instead must raise it.
+    Same claim, same valence, only the PUBLICATION DATES differ -- which is the
+    anchor (a 2019 paper cited yesterday is old evidence, not new).
     """
-    claim_a = await _belief(store, "Claim A")
-    claim_b = await _belief(store, "Claim B")
-    consenter = await _paper(store, "Consistent paper")
-    source_x = await _paper(store, "Mixed-record paper")
-    await _proves(store, consenter, claim_a, 0.8)
-    await _proves(store, consenter, claim_b, 0.8)
-    await _proves(store, source_x, claim_a, 0.75)
-    await _proves(store, source_x, claim_b, -0.9)
+    claim = await _belief(store, "Claim with an old and a new supporter")
+    old_paper = await _paper(store, "Old survey (2019)")
+    new_paper = await _paper(store, "Recent replication (2026)")
+    await _proves(store, old_paper, claim, 0.7)
+    await _proves(store, new_paper, claim, 0.7)
+    await _publish(store, old_paper, 730)  # two years old
+    await _publish(store, new_paper, 0)
 
-    # Agreement stale (400 days old), dissent fresh.
-    await _backdate(store, source_x, claim_a, 400)
-    await store.recompute_reliability()
-    stale_agreement = await _reliability_of(store, source_x)
-
-    # Flip: agreement fresh, dissent stale.
-    await _backdate(store, source_x, claim_a, -400)
-    await _backdate(store, source_x, claim_b, 400)
-    await store.recompute_reliability()
-    fresh_agreement = await _reliability_of(store, source_x)
-
-    assert stale_agreement is not None and fresh_agreement is not None
-    assert fresh_agreement > stale_agreement
+    report = await store.evidence_for(claim)
+    assert report is not None
+    newest, oldest = report.citations[0], report.citations[-1]
+    assert newest.decay == pytest.approx(1.0)
+    assert oldest.decay == pytest.approx(0.25, abs=0.01)  # two half-lives
+    assert newest.contribution > oldest.contribution
+    assert report.derived_confidence == pytest.approx(
+        await store.confidence_for(claim),
+    )

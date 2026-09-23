@@ -230,11 +230,13 @@ async def test_identical_timestamps_tiebreak_by_citer_seq(store: Store) -> None:
         await store.add_edge(
             from_id=paper, to_id=claim, edge_kind="proves", actor="tester", valence=0.5
         )
+    # Equal ARTIFACT dates: the recency anchor is the paper's own date, so
+    # giving both the same publication date makes the contributions tie.
     async with store.engine.acquire() as conn:
         await conn.execute(
-            "UPDATE edges SET created = (SELECT max(created) FROM edges) "
-            "WHERE to_id = $1",
-            claim,
+            "UPDATE inquiries SET paper_publish_date = clock_timestamp() "
+            "WHERE id = ANY($1::uuid[])",
+            [first, second],
         )
     report = await store.evidence_for(claim)
     assert report is not None

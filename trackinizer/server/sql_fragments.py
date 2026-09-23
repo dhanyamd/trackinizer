@@ -170,9 +170,10 @@ PROVING_EDGES_SQL: Final[str] = vetted_sql(
     # proof (> 0) lifts. ``evidence_for`` additionally displays the citer's
     # short-ref and title, so the projection carries them too; its only
     # consumers read named columns, so extra projections stay inert.
-    "SELECT e.from_id, t.kind AS from_kind, e.valence, e.created AS edge_created, "
+    "SELECT e.from_id, t.kind AS from_kind, e.valence, "
     "       t.seq AS from_seq, t.title AS from_title, t.status AS from_status, "
-    "       t.artifact_reliability AS from_reliability "
+    "       t.artifact_reliability AS from_reliability, "
+    "       COALESCE(t.paper_publish_date, t.created) AS evidence_date "
     "FROM edges e "
     "JOIN inquiries t ON t.id = e.from_id "
     "WHERE e.edge_kind = 'proves' AND e.to_id = $1 "
@@ -198,7 +199,9 @@ RELIABILITY_EDGES_SQL: Final[str] = vetted_sql(
     # The same currency rule as PROVING_EDGES_SQL, but over the WHOLE proves
     # matrix (no per-claim target): reliability is a global fixed point, so the
     # sweep loads every currently-true citation in one query.
-    "SELECT e.from_id, e.to_id, e.valence, e.created FROM edges e "
+    "SELECT e.from_id, e.to_id, e.valence, "
+    "       COALESCE(t.paper_publish_date, t.created) AS evidence_date "
+    "FROM edges e "
     "JOIN inquiries t ON t.id = e.from_id "
     "WHERE e.edge_kind = 'proves' "
     "  AND ("

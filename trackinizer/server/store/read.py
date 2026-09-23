@@ -483,7 +483,7 @@ class _ReadMixin(_StoreShared):
         log_odds = 0.0
         proving = await conn.fetch(PROVING_EDGES_SQL, node_id)
         newest = max(
-            (cast(datetime, row["edge_created"]) for row in proving),
+            (cast(datetime, row["evidence_date"]) for row in proving),
             default=None,
         )
         for row in proving:
@@ -501,7 +501,7 @@ class _ReadMixin(_StoreShared):
             # freshest citation counts fully, older ones decay by half-life.
             # Every citation the same age -> tau = 1.0 -> time-blind fold.
             tau = temporal_weight(
-                (newest - cast(datetime, row["edge_created"])).total_seconds()
+                (newest - cast(datetime, row["evidence_date"])).total_seconds()
                 if newest is not None
                 else 0.0,
             )
@@ -575,7 +575,7 @@ class _ReadMixin(_StoreShared):
                 return None
             rows = await conn.fetch(PROVING_EDGES_SQL, target_id)
             newest = max(
-                (cast(datetime, row["edge_created"]) for row in rows),
+                (cast(datetime, row["evidence_date"]) for row in rows),
                 default=None,
             )
             # One shared memo across every citer: the citers of one claim are
@@ -604,7 +604,7 @@ class _ReadMixin(_StoreShared):
                     else 1.0
                 )
                 decay = temporal_weight(
-                    (newest - cast(datetime, edge["edge_created"])).total_seconds()
+                    (newest - cast(datetime, edge["evidence_date"])).total_seconds()
                     if newest is not None
                     else 0.0,
                 )

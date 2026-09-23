@@ -78,7 +78,7 @@ class _ReliabilityMixin(_StoreShared):
         newest_by_claim: dict[UUID, datetime] = {}
         for row in rows:
             claim_id = cast(UUID, row["to_id"])
-            created = cast(datetime, row["created"])
+            created = cast(datetime, row["evidence_date"])
             if claim_id not in newest_by_claim or created > newest_by_claim[claim_id]:
                 newest_by_claim[claim_id] = created
         citations = [
@@ -88,7 +88,7 @@ class _ReliabilityMixin(_StoreShared):
                 valence=cast(float, row["valence"]),
                 tau=temporal_weight(
                     (newest_by_claim[cast(UUID, row["to_id"])]
-                     - cast(datetime, row["created"])).total_seconds(),
+                     - cast(datetime, row["evidence_date"])).total_seconds(),
                 ),
             )
             for row in rows
