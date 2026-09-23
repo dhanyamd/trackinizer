@@ -199,7 +199,30 @@ async def test_belief_citer_contributes_its_own_folded_confidence(store: Store) 
 
 @pytest.mark.db_pglite
 @pytest.mark.asyncio(loop_scope="session")
-async def test_equal_contributions_tiebreak_by_citer_seq(store: Store) -> None:
+async def test_equal_valence_ranks_the_fresher_citation_first(store: Store) -> None:
+    """Same valence, different recording times: the newer citation ranks higher.
+
+    This is the temporal term visible in the ranking -- the contributions differ
+    only by the sub-second age gap between the two edge writes.
+    """
+    claim = await _proven_belief(store, "Claim with two equal voices")
+    older = await _paper(store, "Older paper")
+    newer = await _paper(store, "Newer paper")
+    for paper in (older, newer):
+        await store.add_edge(
+            from_id=paper, to_id=claim, edge_kind="proves", actor="tester",
+            valence=0.5,
+        )
+    report = await store.evidence_for(claim)
+    assert report is not None
+    assert [c.seq for c in report.citations] == [2, 1]
+    assert report.citations[0].decay >= report.citations[1].decay
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_identical_timestamps_tiebreak_by_citer_seq(store: Store) -> None:
+    """With identical recording times the contributions tie, and seq breaks it."""
     claim = await _proven_belief(store, "Tied claim")
     first = await _paper(store, "First paper")
     second = await _paper(store, "Second paper")
@@ -207,7 +230,13 @@ async def test_equal_contributions_tiebreak_by_citer_seq(store: Store) -> None:
         await store.add_edge(
             from_id=paper, to_id=claim, edge_kind="proves", actor="tester", valence=0.5
         )
-
+    async with store.engine.acquire() as conn:
+        await conn.execute(
+            "UPDATE edges SET created = (SELECT max(created) FROM edges) "
+            "WHERE to_id = $1",
+            claim,
+        )
     report = await store.evidence_for(claim)
     assert report is not None
     assert [c.seq for c in report.citations] == [1, 2]
+    assert report.citations[0].decay == report.citations[1].decay == 1.0

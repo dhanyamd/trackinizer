@@ -7,6 +7,18 @@ All notable trackinizer changes are documented here. This project follows
 
 ### Added
 
+- Temporal weighting (time-aware truth discovery): a citation now counts less
+  the older it is relative to the freshest evidence on the same claim --
+  exponential decay with a one-year half-life (`types/reliability.
+  temporal_weight`), applied in both the confidence fold and the reliability
+  sweep. `edges` gained a `created` timestamp (migration 027) as the anchor.
+  The chi-square test stays valid under the weighted deviations via
+  Satterthwaite's moment-matching for the effective degrees of freedom, and
+  uniform ages reproduce the time-blind computation exactly -- both pinned by
+  tests. The half-life is the one modelling choice and it is exposed;
+  supersession remains the mechanism for old-replaced-by-new (a superseded
+  claim's citations leave the matrix entirely), so recency reweights evidence
+  without ever forming a verdict.
 - Derived source reliability: a background sweep estimates each citing
   Artifact's reliability from the signed-valence `proves` citation matrix as a
   chi-square-bounded truth-discovery fixed point

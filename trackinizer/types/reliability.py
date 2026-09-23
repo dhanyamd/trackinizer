@@ -50,14 +50,30 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "HALF_LIFE_SECONDS",
     "MAX_ITERATIONS",
     "NEUTRAL_TRUTH",
     "TOLERANCE",
     "Citation",
     "chisq_sf",
     "reliability_fixed_point",
+    "temporal_weight",
 ]
 
+
+HALF_LIFE_SECONDS: float = 365.0 * 24.0 * 3600.0
+"""Recency half-life: one year. A citation this old relative to the newest
+evidence on its claim contributes half the weight of a fresh one.
+
+The only modelling choice this module makes, and it is exposed rather than
+buried: research claims age on the scale of publication and replication cycles,
+so a year is the documented default. Time-aware truth discovery is the
+published line this follows (Huang & Wang, "Time-Aware Truth Discovery in
+Social Sensing", IEEE MASS 2015); exponential forgetting is the standard decay
+form. Degeneracy keeps it safe: when every citation on a claim is the same age
+(age 0), every temporal weight is exactly 1.0 and the computation is identical
+to the time-blind one.
+"""
 
 MAX_ITERATIONS: int = 100
 """Hard cap on fixed-point passes; convergence normally stops the loop first."""
@@ -90,12 +106,40 @@ class Citation:
       valence: The signed weight in ``[-1, 1]`` (positive supports, negative
         argues against; magnitude is the evidential weight the recorder
         assigned).
+      tau: Temporal weight in ``(0, 1]`` -- how much this citation counts given
+        its age relative to the newest evidence on its claim
+        (:func:`temporal_weight`). ``1.0`` for the freshest citation, less for
+        older ones; ``1.0`` everywhere reproduces the time-blind computation.
 
     """
 
     source: UUID
     claim: UUID
     valence: float
+    tau: float = 1.0
+
+
+def temporal_weight(age_seconds: float, *, half_life: float = HALF_LIFE_SECONDS) -> float:
+    """Return a citation's recency weight: ``0.5 ** (age / half_life)``.
+
+    Exponential forgetting, the standard decay form: a citation one half-life
+    older than the freshest evidence on its claim counts half as much; two
+    half-lives, a quarter. Monotone decreasing in age, exactly ``1.0`` at age
+    zero (so a claim whose evidence all arrived together is untouched), and
+    never zero -- stale evidence is discounted, never erased.
+
+    Args:
+      age_seconds: How old this citation is relative to the newest currently-true
+        citation on the same claim. Negative ages clamp to 0.
+      half_life: Seconds after which a citation's weight halves.
+
+    Returns:
+      tau: Temporal weight in ``(0, 1]``.
+
+    """
+    if age_seconds <= 0.0:
+        return 1.0
+    return 0.5 ** (age_seconds / half_life)
 
 
 def chisq_sf(x: float, df: float) -> float:
@@ -173,32 +217,51 @@ def reliability_fixed_point(
     """
     if not citations:
         return {}
-    by_source: dict[UUID, list[tuple[UUID, float]]] = {}
-    by_claim: dict[UUID, list[tuple[UUID, float]]] = {}
+    by_source: dict[UUID, list[tuple[UUID, float, float]]] = {}
+    by_claim: dict[UUID, list[tuple[UUID, float, float]]] = {}
     for citation in citations:
         by_source.setdefault(citation.source, []).append(
-            (citation.claim, citation.valence),
+            (citation.claim, citation.valence, citation.tau),
         )
         by_claim.setdefault(citation.claim, []).append(
-            (citation.source, citation.valence),
+            (citation.source, citation.valence, citation.tau),
         )
     weights: dict[UUID, float] = dict.fromkeys(by_source, 1.0)
     for _ in range(max_iterations):
-        # Reliability-weighted consensus truth per claim.
+        # Reliability- and recency-weighted consensus truth per claim.
         truth: dict[UUID, float] = {}
         for claim, speakers in by_claim.items():
-            weight_sum = sum(weights[source] for source, _ in speakers)
+            mass = sum(weights[source] * tau for source, _, tau in speakers)
             truth[claim] = (
-                sum(weights[source] * valence for source, valence in speakers)
-                / weight_sum
-                if weight_sum > 1e-12
+                sum(
+                    weights[source] * tau * valence
+                    for source, valence, tau in speakers
+                )
+                / mass
+                if mass > 1e-12
                 else NEUTRAL_TRUTH
             )
-        # Chi-square survival of each source's deviation from that consensus.
+        # Chi-square survival of each source's recency-weighted deviation from
+        # that consensus. With temporal weights the statistic is a weighted sum
+        # of squared deviations, whose null distribution is not chi-square with
+        # L degrees of freedom; Satterthwaite's standard moment-matching gives
+        # the equivalent scaled chi-square: effective df nu = (sum tau)^2 /
+        # sum tau^2 and scale = sum tau^2 / sum tau, so
+        # P(sum tau_i z_i^2 >= D) ~= P(chi2(nu) >= D / scale). Uniform tau
+        # collapses to nu = L and scale = 1 -- exactly the time-blind form.
         nxt: dict[UUID, float] = {}
         for source, spoken in by_source.items():
-            deviation = sum((valence - truth[claim]) ** 2 for claim, valence in spoken)
-            weight = chisq_sf(deviation, float(len(spoken)))
+            tau_sum = sum(tau for _, _, tau in spoken)
+            tau_sq_sum = sum(tau * tau for _, _, tau in spoken)
+            deviation = sum(
+                tau * (valence - truth[claim]) ** 2 for claim, valence, tau in spoken
+            )
+            if tau_sum <= 0.0 or tau_sq_sum <= 0.0:
+                nxt[source] = 0.0
+                continue
+            nu = tau_sum * tau_sum / tau_sq_sum
+            scale = tau_sq_sum / tau_sum
+            weight = chisq_sf(deviation / scale, nu)
             nxt[source] = 0.0 if math.isnan(weight) else weight
         delta = sum(abs(nxt[source] - before) for source, before in weights.items())
         weights = nxt

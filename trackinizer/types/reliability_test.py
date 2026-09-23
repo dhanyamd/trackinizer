@@ -13,7 +13,12 @@ from uuid import uuid4
 
 import pytest
 
-from trackinizer.types.reliability import Citation, chisq_sf, reliability_fixed_point
+from trackinizer.types.reliability import (
+    Citation,
+    chisq_sf,
+    reliability_fixed_point,
+    temporal_weight,
+)
 
 
 def _citation(source: object, claim: object, valence: float) -> Citation:
@@ -151,3 +156,80 @@ def test_all_collapsed_sources_leave_claims_neutral_not_supported() -> None:
         max_iterations=40,
     )
     assert all(weight >= 0.0 for weight in weights.values())
+
+# -- temporal weighting --------------------------------------------------------
+
+
+def test_temporal_weight_is_one_at_zero_and_halves_at_half_life() -> None:
+    assert temporal_weight(0.0, half_life=100.0) == 1.0
+    assert temporal_weight(100.0, half_life=100.0) == pytest.approx(0.5)
+    assert temporal_weight(200.0, half_life=100.0) == pytest.approx(0.25)
+
+
+def test_temporal_weight_is_monotone_and_underflows_only_far_past() -> None:
+    previous = 1.0
+    for age in (0.0, 1.0, 1000.0, 100_000.0):  # up to 1000 half-lives
+        current = temporal_weight(age, half_life=100.0)
+        assert 0.0 < current <= previous
+        previous = current
+    # Thousands of half-lives underflow to exact zero: evidence that old is
+    # gone, not merely discounted. The fixed point guards a zero tau mass.
+    assert temporal_weight(1e9, half_life=100.0) == 0.0
+
+
+def test_uniform_taus_reduce_to_the_time_blind_computation() -> None:
+    """tau = 1 everywhere must reproduce the pre-temporal fixed point exactly.
+
+    Pinned against the closed form for two opposite single-claim sources:
+    erfc(sqrt(0.81/2)); Satterthwaite df/scale must collapse to L and 1.
+    """
+    a, b, claim = uuid4(), uuid4(), uuid4()
+    weights = reliability_fixed_point(
+        [_citation(a, claim, 0.9), _citation(b, claim, -0.9)],
+    )
+    assert weights[a] == pytest.approx(math.erfc(math.sqrt(0.81 / 2)), abs=1e-6)
+
+
+def test_recency_weighs_a_sources_history_not_a_lone_claim() -> None:
+    """Reliability follows the RECENT half of a source's record.
+
+    Each source speaks on two claims backed by the same consenter: one claim
+    agrees, one dissents. Only the ages differ. The source whose agreement is
+    fresh outranks the one whose agreement is stale -- which is the whole point
+    of time-aware reliability. (For a source with a single claim, tau cancels
+    in the standardized statistic, so recency cannot move its weight; that
+    cancellation is asserted separately below.)
+    """
+    claim_a, claim_b = uuid4(), uuid4()
+    recent_agree, recent_dissent, consenter = uuid4(), uuid4(), uuid4()
+    weights = reliability_fixed_point(
+        [
+            _citation(consenter, claim_a, 0.8),
+            _citation(consenter, claim_b, 0.8),
+            # agreement fresh, dissent stale
+            Citation(source=recent_agree, claim=claim_a, valence=0.75, tau=1.0),
+            Citation(source=recent_agree, claim=claim_b, valence=-0.9, tau=0.02),
+            # agreement stale, dissent fresh
+            Citation(source=recent_dissent, claim=claim_a, valence=0.75, tau=0.02),
+            Citation(source=recent_dissent, claim=claim_b, valence=-0.9, tau=1.0),
+        ],
+    )
+    assert weights[recent_agree] > weights[recent_dissent]
+
+
+def test_a_lone_claim_cannot_move_its_source_by_recency() -> None:
+    """One citation: tau scales numerator and null equally, so it cancels.
+
+    Mathematically the standardized statistic is unchanged, which is the right
+    behaviour -- there is no trend to read from a single data point.
+    """
+    claim = uuid4()
+    fresh, stale = uuid4(), uuid4()
+    weights = reliability_fixed_point(
+        [
+            _citation(uuid4(), claim, 0.8),
+            Citation(source=fresh, claim=claim, valence=-0.9, tau=1.0),
+            Citation(source=stale, claim=claim, valence=-0.9, tau=0.05),
+        ],
+    )
+    assert weights[fresh] == pytest.approx(weights[stale], abs=1e-9)

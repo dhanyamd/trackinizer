@@ -19,13 +19,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from datetime import datetime
 from uuid import UUID
 
 from trackinizer.server.notify import tx
 from trackinizer.server.sql_fragments import RELIABILITY_EDGES_SQL
 from trackinizer.server.store.shared import _StoreShared
 from trackinizer.server.values import vetted_sql
-from trackinizer.types.reliability import Citation, reliability_fixed_point
+from trackinizer.types.reliability import (
+    Citation,
+    reliability_fixed_point,
+    temporal_weight,
+)
 
 
 if TYPE_CHECKING:
@@ -66,11 +71,25 @@ class _ReliabilityMixin(_StoreShared):
     async def _recompute_reliability(self, conn: Conn) -> int:
         """Load the matrix, iterate, and write the column in one transaction."""
         rows = await conn.fetch(RELIABILITY_EDGES_SQL)
+        # Recency is measured against the newest citation ON EACH CLAIM, so the
+        # temporal weight is deterministic (no wall-clock dependence) and a
+        # claim whose evidence all arrived together is untouched: every age is
+        # zero and every tau is exactly 1.0.
+        newest_by_claim: dict[UUID, datetime] = {}
+        for row in rows:
+            claim_id = cast(UUID, row["to_id"])
+            created = cast(datetime, row["created"])
+            if claim_id not in newest_by_claim or created > newest_by_claim[claim_id]:
+                newest_by_claim[claim_id] = created
         citations = [
             Citation(
                 source=cast(UUID, row["from_id"]),
                 claim=cast(UUID, row["to_id"]),
                 valence=cast(float, row["valence"]),
+                tau=temporal_weight(
+                    (newest_by_claim[cast(UUID, row["to_id"])]
+                     - cast(datetime, row["created"])).total_seconds(),
+                ),
             )
             for row in rows
         ]

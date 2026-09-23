@@ -1,0 +1,25 @@
+-- schema.027.sql -- per-edge creation time, the temporal anchor.
+--
+-- Adds a NOT NULL ``created`` timestamp to ``edges``, defaulted to
+-- ``clock_timestamp()``. The derived signals weigh a citation by how old it is
+-- relative to the freshest evidence on the same claim
+-- (``types/reliability.temporal_weight``), and the edge's own recording time is
+-- the only honest anchor: the artifact's publication date is a different fact,
+-- and the edge previously carried no time at all.
+--
+-- Existing rows receive the migration's own timestamp -- the volatile default
+-- forces a rewrite -- so pre-migration edges read as fresh (no discount) rather
+-- than as infinitely old. That is the conservative direction: the temporal term
+-- can only reduce a historical citation's weight from what the time-blind build
+-- gave it, never inflate it.
+--
+-- The baseline ``schema.sql`` carries the column for a fresh install; a fresh DB
+-- records this migration applied WITHOUT executing it, an existing DB records
+-- the baseline unrun and executes only this file, so the two must stay in step
+-- -- pinned by ``schema_migration_test.py``.
+--
+-- Numbered 027: the deployed ledger holds through schema.026.sql.
+--
+-- Purely additive DDL into a column the old build never reads, safe against the
+-- OLD code and not downtime (see docs/db_schema_migration.md).
+ALTER TABLE edges ADD COLUMN IF NOT EXISTS created TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp();

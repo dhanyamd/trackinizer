@@ -319,6 +319,12 @@ CREATE TABLE IF NOT EXISTS edges (
     to_id          UUID NOT NULL REFERENCES inquiries(id) ON DELETE CASCADE,
     to_kind        TEXT NOT NULL,
     edge_kind      TEXT NOT NULL,
+    -- When this citation was recorded. The temporal anchor for the derived
+    -- signals: a recency weight (types/reliability.temporal_weight) discounts
+    -- evidence that is old relative to the freshest evidence on the same
+    -- claim. Recording time, not the artifact's publication date -- it is
+    -- when the observation entered the graph, which is what the store knows.
+    created        TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 {edge_metadata_columns},
     PRIMARY KEY (from_id, to_id, edge_kind),
     CHECK (from_id <> to_id),

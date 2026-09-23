@@ -149,3 +149,47 @@ async def test_currency_invalidated_source_stops_voting(store: Store) -> None:
     await store.set_status(paper, "invalid", actor="tester")
     await store.recompute_reliability()
     assert await _reliability_of(store, paper) is None
+
+async def _backdate(store: Store, source: UUID, claim: UUID, days: int) -> None:
+    """Age one citation by ``days`` so recency has something to measure."""
+    async with store.engine.acquire() as conn:
+        await conn.execute(
+            "UPDATE edges SET created = created - make_interval(days => $3) "
+            "WHERE from_id = $1 AND to_id = $2",
+            source,
+            claim,
+            days,
+        )
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_stale_disagreement_weighs_less_than_fresh_agreement(store: Store) -> None:
+    """The store's recency term: a source is judged by its RECENT record.
+
+    Source X agrees on claim A and dissents on claim B. Backdating X's
+    agreement (making the agreement stale, the dissent fresh) must lower its
+    weight, and backdating the dissent instead must raise it.
+    """
+    claim_a = await _belief(store, "Claim A")
+    claim_b = await _belief(store, "Claim B")
+    consenter = await _paper(store, "Consistent paper")
+    source_x = await _paper(store, "Mixed-record paper")
+    await _proves(store, consenter, claim_a, 0.8)
+    await _proves(store, consenter, claim_b, 0.8)
+    await _proves(store, source_x, claim_a, 0.75)
+    await _proves(store, source_x, claim_b, -0.9)
+
+    # Agreement stale (400 days old), dissent fresh.
+    await _backdate(store, source_x, claim_a, 400)
+    await store.recompute_reliability()
+    stale_agreement = await _reliability_of(store, source_x)
+
+    # Flip: agreement fresh, dissent stale.
+    await _backdate(store, source_x, claim_a, -400)
+    await _backdate(store, source_x, claim_b, 400)
+    await store.recompute_reliability()
+    fresh_agreement = await _reliability_of(store, source_x)
+
+    assert stale_agreement is not None and fresh_agreement is not None
+    assert fresh_agreement > stale_agreement

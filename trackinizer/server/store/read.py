@@ -9,6 +9,7 @@ A pure leaf: :meth:`get_inquiry`, :meth:`list_kind`, :meth:`next_issue`,
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, cast
 from uuid import UUID
 
@@ -29,6 +30,7 @@ from trackinizer.server.sql_fragments import (
 from trackinizer.server.store.shared import _StoreShared
 from trackinizer.server.values import manifest_bound, vetted_sql
 from trackinizer.types.belief_confidence import NEUTRAL_CONFIDENCE, fold_confidence
+from trackinizer.types.reliability import temporal_weight
 from trackinizer.types.change_log import Change
 from trackinizer.types.cost import Cost
 from trackinizer.types.errors import NotFoundError
@@ -121,9 +123,12 @@ class EvidenceCitation:
         Belief/Experiment citer.
       reliability: The citing row's sweep-estimated truth-discovery weight,
         ``1.0`` when not yet computed (the cold-start uniform prior).
-      contribution: ``reliability * citer_confidence * valence`` -- the exact
-        summand this citation contributes to the target's derived-confidence
-        log-odds.
+      decay: The citation's recency weight relative to the newest evidence on
+        this claim -- ``1.0`` for the freshest, decaying by half-life for
+        older evidence.
+      contribution: ``reliability * citer_confidence * decay * valence`` --
+        the exact summand this citation contributes to the target's
+        derived-confidence log-odds.
 
     """
 
@@ -135,6 +140,7 @@ class EvidenceCitation:
     valence: float
     citer_confidence: float
     reliability: float
+    decay: float
     contribution: float
 
 
@@ -475,7 +481,12 @@ class _ReadMixin(_StoreShared):
             return NEUTRAL_CONFIDENCE
         visiting.add(node_id)
         log_odds = 0.0
-        for row in await conn.fetch(PROVING_EDGES_SQL, node_id):
+        proving = await conn.fetch(PROVING_EDGES_SQL, node_id)
+        newest = max(
+            (cast(datetime, row["edge_created"]) for row in proving),
+            default=None,
+        )
+        for row in proving:
             from_kind = cast(str, row["from_kind"])
             valence = cast(float, row["valence"])
             # The citing row's reliability weight, when the sweep has estimated
@@ -485,6 +496,14 @@ class _ReadMixin(_StoreShared):
                 cast(float, row["from_reliability"])
                 if row["from_reliability"] is not None
                 else 1.0
+            )
+            # Recency, measured against the newest evidence on this claim: the
+            # freshest citation counts fully, older ones decay by half-life.
+            # Every citation the same age -> tau = 1.0 -> time-blind fold.
+            tau = temporal_weight(
+                (newest - cast(datetime, row["edge_created"])).total_seconds()
+                if newest is not None
+                else 0.0,
             )
             citation_confidence = (
                 await self._node_confidence(
@@ -496,7 +515,7 @@ class _ReadMixin(_StoreShared):
                 if from_kind in _CLAIMABLE_KINDS
                 else 1.0
             )
-            log_odds += reliability * citation_confidence * valence
+            log_odds += reliability * citation_confidence * tau * valence
         visiting.discard(node_id)
         result = fold_confidence(log_odds)
         memo[node_id] = result
@@ -555,6 +574,10 @@ class _ReadMixin(_StoreShared):
             if target is None or target["kind"] not in _CLAIMABLE_KINDS:
                 return None
             rows = await conn.fetch(PROVING_EDGES_SQL, target_id)
+            newest = max(
+                (cast(datetime, row["edge_created"]) for row in rows),
+                default=None,
+            )
             # One shared memo across every citer: the citers of one claim are
             # the first hop of one walk, so they share the memo a single
             # confidence walk would have built.
@@ -580,7 +603,12 @@ class _ReadMixin(_StoreShared):
                     if edge["from_kind"] in _CLAIMABLE_KINDS
                     else 1.0
                 )
-                contribution = reliability * citer_confidence * valence
+                decay = temporal_weight(
+                    (newest - cast(datetime, edge["edge_created"])).total_seconds()
+                    if newest is not None
+                    else 0.0,
+                )
+                contribution = reliability * citer_confidence * decay * valence
                 log_odds += contribution
                 citations.append(
                     EvidenceCitation(
@@ -592,6 +620,7 @@ class _ReadMixin(_StoreShared):
                         valence=valence,
                         citer_confidence=citer_confidence,
                         reliability=reliability,
+                        decay=decay,
                         contribution=contribution,
                     ),
                 )
