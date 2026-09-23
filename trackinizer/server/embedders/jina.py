@@ -151,16 +151,22 @@ class JinaV5Embedder:
         if self._model is None:
             raise ValueError("Expected the model to be loaded before embedding.")
         # ``encode`` is defined in the repo's trust_remote_code module, so it is
-        # untyped here; name the call and route its result through ``torch`` for
-        # the normalize. ``convert_to_tensor`` keeps it on-device as a Tensor.
+        # untyped here. Its REAL signature at the pinned revision is
+        # ``encode(texts, task, prompt_name='document', truncate_dim=None,
+        # max_length=None) -> List[torch.Tensor]``: one tensor PER TEXT, and no
+        # ``convert_to_tensor`` kwarg (verified against the loaded model -- the
+        # fake-model tests cannot see this). Stack the per-text tensors, then
+        # normalize as a matrix.
         encode = cast("_Encoder", self._model)
-        raw = encode.encode(
-            texts,
-            task=_TASK,
-            prompt_name=prompt_name,
-            convert_to_tensor=True,
+        raw = encode.encode(texts, task=_TASK, prompt_name=prompt_name)
+        tensors = (
+            raw
+            if isinstance(raw, torch.Tensor)
+            else torch.stack(
+                [t.detach().cpu().to(torch.float32) for t in raw],
+            )
         )
-        tensor = cast("torch.Tensor", raw)
+        tensor = cast("torch.Tensor", tensors)
         normalized = functional.normalize(tensor, p=2, dim=1)
         listed = cast(object, normalized.to(torch.float32).cpu().tolist())
         return cast("list[list[float]]", listed)
