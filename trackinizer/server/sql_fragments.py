@@ -147,7 +147,7 @@ PROVES_BELIEF_SQL: Final[str] = vetted_sql(
     "  AND ("
     "    (t.kind = 'Belief' AND t.belief_judgement = 'proven') "
     "    OR (t.kind = 'Experiment' AND t.status = 'complete') "
-    "    OR (t.kind NOT IN ('Belief', 'Experiment') AND t.status = 'active')"
+    "    OR (t.kind NOT IN ('Belief', 'Experiment') AND t.status IN ('active', 'complete'))"
     "  ) ",
     _policy_exclude_clauses(
         subject_alias="t.id",
@@ -181,7 +181,7 @@ PROVING_EDGES_SQL: Final[str] = vetted_sql(
     "  AND ("
     "    (t.kind = 'Belief' AND t.belief_judgement = 'proven') "
     "    OR (t.kind = 'Experiment' AND t.status = 'complete') "
-    "    OR (t.kind NOT IN ('Belief', 'Experiment') AND t.status = 'active')"
+    "    OR (t.kind NOT IN ('Belief', 'Experiment') AND t.status IN ('active', 'complete'))"
     "  ) ",
     _policy_exclude_clauses(
         subject_alias="t.id",
@@ -208,7 +208,7 @@ RELIABILITY_EDGES_SQL: Final[str] = vetted_sql(
     "  AND ("
     "    (t.kind = 'Belief' AND t.belief_judgement = 'proven') "
     "    OR (t.kind = 'Experiment' AND t.status = 'complete') "
-    "    OR (t.kind NOT IN ('Belief', 'Experiment') AND t.status = 'active')"
+    "    OR (t.kind NOT IN ('Belief', 'Experiment') AND t.status IN ('active', 'complete'))"
     "  ) ",
     _policy_exclude_clauses(
         subject_alias="t.id",

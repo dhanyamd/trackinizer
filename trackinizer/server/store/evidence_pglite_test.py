@@ -277,3 +277,25 @@ async def test_identical_timestamps_tiebreak_by_citer_seq(store: Store) -> None:
     assert report is not None
     assert [c.seq for c in report.citations] == [1, 2]
     assert report.citations[0].decay == report.citations[1].decay == 1.0
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_a_completed_paper_still_counts_as_currently_true(store: Store) -> None:
+    """Regression from real agent use: marking a processed paper 'complete'
+    dropped its citation from the fold. A finished paper's assertion stands --
+    complete is MORE settled than active, not less. Only abandoned/invalid
+    sources lose their vote.
+    """
+    claim = await _proven_belief(store, "Claim whose source gets completed")
+    paper = await _paper(store, "Fully processed report")
+    await store.add_edge(
+        from_id=paper, to_id=claim, edge_kind="proves", actor="tester", valence=0.8,
+    )
+    before = await store.confidence_for(claim)
+
+    await store.set_status(paper, "complete", actor="tester")
+    report = await store.evidence_for(claim)
+    assert report is not None
+    assert len(report.citations) == 1
+    assert await store.confidence_for(claim) == pytest.approx(before)
