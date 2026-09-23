@@ -399,6 +399,7 @@ async def evidence_route(
                 "citer_confidence": c.citer_confidence,
                 "reliability": c.reliability,
                 "decay": c.decay,
+                "related": c.related,
                 "contribution": c.contribution,
             }
             for c in report.citations

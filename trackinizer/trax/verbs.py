@@ -2661,15 +2661,21 @@ Options:
             return
         echo("")
         for citation in citations:
+            drift = (
+                "   <-- possible drift: shares no text with the claim"
+                if cast(float, citation["related"]) == 0.0
+                else ""
+            )
             echo(
                 f"{cast(float, citation['contribution']):+8.3f}"
                 f"   val {cast(float, citation['valence']):+5.2f}"
                 f"   conf {cast(float, citation['citer_confidence']):4.2f}"
                 f"   w {cast(float, citation['reliability']):4.2f}"
                 f"   age_w {cast(float, citation['decay']):4.2f}"
+                f"   rel {cast(float, citation['related']):4.2f}"
                 f"   {cast(str, citation['kind'])}#{cast(int, citation['seq'])}"
                 f" · {cast(str, citation['title'])}"
-                f" [{cast(str, citation['status'])}]",
+                f" [{cast(str, citation['status'])}]{drift}",
             )
 
 

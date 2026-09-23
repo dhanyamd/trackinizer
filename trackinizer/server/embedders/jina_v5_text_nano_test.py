@@ -31,17 +31,22 @@ class _FakeEncoder:
     def encode(
         self,
         texts: list[str],
-        *,
         task: str,
-        prompt_name: str,
-        convert_to_tensor: bool,
-    ) -> torch.Tensor:
-        """Return a non-unit constant tensor, recording the prompt name."""
-        del task, convert_to_tensor
+        prompt_name: str = "document",
+        truncate_dim: int | None = None,
+        max_length: int | None = None,
+    ) -> list[torch.Tensor]:
+        """Mirror the REAL pinned-model signature: one tensor PER TEXT.
+
+        The fakes originally mirrored a call the real model does not accept
+        (``convert_to_tensor=...``) -- exactly the wrapper-vs-model drift the
+        real signature exists to catch. Deliberately non-unit (all 3.0) so the
+        embedder's own L2-normalize is what makes the result unit -- proving we
+        normalize defensively.
+        """
+        del task, truncate_dim, max_length
         self.prompts.append(prompt_name)
-        # Deliberately non-unit (all 3.0) so the embedder's own L2-normalize is
-        # what makes the result unit -- proving we normalize defensively.
-        return torch.full((len(texts), self._dim), 3.0)
+        return [torch.full((self._dim,), 3.0) for _ in texts]
 
 
 def _patch_load(monkeypatch: pytest.MonkeyPatch, fake: _FakeEncoder) -> None:

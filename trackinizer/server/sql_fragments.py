@@ -173,6 +173,7 @@ PROVING_EDGES_SQL: Final[str] = vetted_sql(
     "SELECT e.from_id, t.kind AS from_kind, e.valence, "
     "       t.seq AS from_seq, t.title AS from_title, t.status AS from_status, "
     "       t.artifact_reliability AS from_reliability, "
+    "       COALESCE(t.paper_abstract, '') AS from_abstract, "
     "       COALESCE(t.paper_publish_date, t.created) AS evidence_date "
     "FROM edges e "
     "JOIN inquiries t ON t.id = e.from_id "

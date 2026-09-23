@@ -31,6 +31,7 @@ from trackinizer.server.store.shared import _StoreShared
 from trackinizer.server.values import manifest_bound, vetted_sql
 from trackinizer.types.belief_confidence import NEUTRAL_CONFIDENCE, fold_confidence
 from trackinizer.types.reliability import claim_taus
+from trackinizer.types.textmatch import related_scores
 from trackinizer.types.change_log import Change
 from trackinizer.types.cost import Cost
 from trackinizer.types.errors import NotFoundError
@@ -126,6 +127,11 @@ class EvidenceCitation:
       decay: The citation's recency weight relative to the newest evidence on
         this claim -- ``1.0`` for the freshest, decaying by half-life for
         older evidence.
+      related: BM25 keyword relatedness between the claim text and this
+        citation's title+abstract, max-normalized within the claim's
+        citations. ``0.0`` = shares no token with the claim (the drift
+        signal); ``1.0`` = this claim's most textually related citation.
+        Computed, never authored.
       contribution: ``reliability * citer_confidence * decay * valence`` --
         the exact summand this citation contributes to the target's
         derived-confidence log-odds.
@@ -141,6 +147,7 @@ class EvidenceCitation:
     citer_confidence: float
     reliability: float
     decay: float
+    related: float
     contribution: float
 
 
@@ -586,6 +593,18 @@ class _ReadMixin(_StoreShared):
             )
             # Same rule as the fold: recency cuts only citations that a newer
             # citation on this claim contradicts (claim_taus).
+            # Relevance gate (validated on SciFact expert labels): BM25 between
+            # the claim text and each citation's title+abstract, max-normalized
+            # within the claim's citations. Zero = no token overlap = drift.
+            related = related_scores(
+                cast(str, target["title"]),
+                [
+                    cast(str, row["from_title"])
+                    + ". "
+                    + cast(str, row["from_abstract"])
+                    for row in rows
+                ],
+            )
             taus = claim_taus(
                 [
                     (
@@ -604,7 +623,7 @@ class _ReadMixin(_StoreShared):
             visiting: set[UUID] = set()
             citations: list[EvidenceCitation] = []
             log_odds = 0.0
-            for edge, decay in zip(rows, taus, strict=True):
+            for edge, decay, rel in zip(rows, taus, related, strict=True):
                 from_id = cast(UUID, edge["from_id"])
                 valence = cast(float, edge["valence"])
                 reliability = (
@@ -635,6 +654,7 @@ class _ReadMixin(_StoreShared):
                         citer_confidence=citer_confidence,
                         reliability=reliability,
                         decay=decay,
+                        related=rel,
                         contribution=contribution,
                     ),
                 )
