@@ -45,6 +45,7 @@ from trackinizer.trax.verbs import (
     Export,
     Graph,
     Id,
+    Install,
     Kind,
     Next,
     Recent,
@@ -134,7 +135,7 @@ class Help(Command):
         ),
         notes=(
             (
-                "Commands: recent next blocked graph board cost profile "
+                "Commands: recent next blocked graph board cost profile install "
                 f"{ENV_WORD} {MACHINE_WORD}"
             ),
             "Help: trax issue help; trax issue 7 priority help; trax profile url help",
@@ -185,6 +186,7 @@ DISPATCHERS: tuple[type[Command], ...] = (
     Version,
     Export,
     Workspace,
+    Install,
     Help,
     Profiles,
     Variables,
