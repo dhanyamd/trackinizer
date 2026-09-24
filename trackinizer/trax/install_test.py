@@ -56,7 +56,8 @@ def test_dry_run_reports_without_writing(fake_home: Path) -> None:
     assert not (fake_home / ".claude" / "skills").exists()
 
 
-def test_reinstall_replaces_wholesale(fake_home: Path) -> None:  # noqa: ARG001 -- home isolation is the point
+@pytest.mark.usefixtures("fake_home")
+def test_reinstall_replaces_wholesale() -> None:
     """A stale child skill from a previous version cannot survive an upgrade."""
     dest, _ = install(TARGETS["claude"])
     stale = dest / "stale-kind" / "SKILL.md"
@@ -69,7 +70,8 @@ def test_reinstall_replaces_wholesale(fake_home: Path) -> None:  # noqa: ARG001 
     assert not stale.exists()
 
 
-def test_uninstall_removes_then_reports_absent(fake_home: Path) -> None:  # noqa: ARG001 -- home isolation is the point
+@pytest.mark.usefixtures("fake_home")
+def test_uninstall_removes_then_reports_absent() -> None:
     install(TARGETS["claude"])
     removed = uninstall(TARGETS["claude"])
     assert removed is not None
@@ -86,7 +88,8 @@ def test_project_scope_installs_under_root(tmp_path: Path) -> None:
     assert uninstall(TARGETS["cursor"], project=True, root=tmp_path) is not None
 
 
-def test_user_scope_refused_for_project_only_agents(fake_home: Path) -> None:  # noqa: ARG001 -- home isolation is the point
+@pytest.mark.usefixtures("fake_home")
+def test_user_scope_refused_for_project_only_agents() -> None:
     """Cursor/codex read project-local skills only; a user install is a mistake."""
     with pytest.raises(InstallError, match="project-local"):
         install(TARGETS["cursor"])
