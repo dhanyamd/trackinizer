@@ -2672,7 +2672,7 @@ Options:
                 f"   conf {cast(float, citation['citer_confidence']):4.2f}"
                 f"   w {cast(float, citation['reliability']):4.2f}"
                 f"   age_w {cast(float, citation['decay']):4.2f}"
-                f"   rel {cast(float, citation['related']):4.2f}"
+                f"   match {cast(float, citation['related']):4.2f}"
                 f"   {cast(str, citation['kind'])}#{cast(int, citation['seq'])}"
                 f" · {cast(str, citation['title'])}"
                 f" [{cast(str, citation['status'])}]{drift}",
