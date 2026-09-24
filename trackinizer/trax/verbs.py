@@ -2734,7 +2734,7 @@ Notes:
             dest, count = install(target, project=project, dry_run=dry_run)
             echo(
                 f"{'would install' if dry_run else 'installed'}: "
-                f"{count} skill files -> {dest}"
+                f"{count} skill files -> {dest}",
             )
             if not dry_run:
                 echo(f"  {target.label} will now discover them as 'trax'.")
