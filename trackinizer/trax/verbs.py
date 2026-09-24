@@ -2723,19 +2723,20 @@ Notes:
     ) -> None:
         del verb, client_factory  # Local file operation; the server is not involved.
         target = TARGETS[cast(str, args.target)]
+        uninstalling = _arg_bool(args, "uninstall")
+        project = _arg_bool(args, "project")
+        dry_run = _arg_bool(args, "dry_run")
         try:
-            if args.uninstall:
-                removed = uninstall(target, project=cast(bool, args.project))
+            if uninstalling:
+                removed = uninstall(target, project=project)
                 echo(f"removed: {removed}" if removed else "not installed")
                 return
-            dest, count = install(
-                target,
-                project=cast(bool, args.project),
-                dry_run=cast(bool, args.dry_run),
+            dest, count = install(target, project=project, dry_run=dry_run)
+            echo(
+                f"{'would install' if dry_run else 'installed'}: "
+                f"{count} skill files -> {dest}"
             )
-            verb_word = "would install" if args.dry_run else "installed"
-            echo(f"{verb_word}: {count} skill files -> {dest}")
-            if not args.dry_run:
+            if not dry_run:
                 echo(f"  {target.label} will now discover them as 'trax'.")
         except InstallError as err:
             raise ClientError(str(err)) from err
