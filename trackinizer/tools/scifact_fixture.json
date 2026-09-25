@@ -1,0 +1,613 @@
+{
+ "docs": [
+  {
+   "doc_id": 14717500,
+   "title": "Rare Variants Create Synthetic Genome-Wide Associations",
+   "abstract": [
+    "Genome-wide association studies (GWAS) have now identified at least 2,000 common variants that appear associated with common diseases or related traits (http://www.genome.gov/gwastudies), hundreds of which have been convincingly replicated.",
+    "It is generally thought that the associated markers reflect the effect of a nearby common (minor allele frequency >0.05) causal site, which is associated with the marker, leading to extensive resequencing efforts to find causal sites.",
+    "We propose as an alternative explanation that variants much less common than the associated one may create \"synthetic associations\" by occurring, stochastically, more often in association with one of the alleles at the common site versus the other allele.",
+    "Although synthetic associations are an obvious theoretical possibility, they have never been systematically explored as a possible explanation for GWAS findings.",
+    "Here, we use simple computer simulations to show the conditions under which such synthetic associations will arise and how they may be recognized.",
+    "We show that they are not only possible, but inevitable, and that under simple but reasonable genetic models, they are likely to account for or contribute to many of the recently identified signals reported in genome-wide association studies.",
+    "We also illustrate the behavior of synthetic associations in real datasets by showing that rare causal mutations responsible for both hearing loss and sickle cell anemia create genome-wide significant synthetic associations, in the latter case extending over a 2.5-Mb interval encompassing scores of \"blocks\" of associated variants.",
+    "In conclusion, uncommon or rare genetic variants can easily create synthetic associations that are credited to common variants, and this possibility requires careful consideration in the interpretation and follow up of GWAS signals."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 13734012,
+   "title": "Prevalent abnormal prion protein in human appendixes after bovine spongiform encephalopathy epizootic: large scale survey",
+   "abstract": [
+    "OBJECTIVES To carry out a further survey of archived appendix samples to understand better the differences between existing estimates of the prevalence of subclinical infection with prions after the bovine spongiform encephalopathy epizootic and to see whether a broader birth cohort was affected, and to understand better the implications for the management of blood and blood products and for the handling of surgical instruments.   \n",
+    "DESIGN Irreversibly unlinked and anonymised large scale survey of archived appendix samples.   \n",
+    "SETTING Archived appendix samples from the pathology departments of 41 UK hospitals participating in the earlier survey, and additional hospitals in regions with lower levels of participation in that survey.   ",
+    "SAMPLE 32,441 archived appendix samples fixed in formalin and embedded in paraffin and tested for the presence of abnormal prion protein (PrP).   \n",
+    "RESULTS Of the 32,441 appendix samples 16 were positive for abnormal PrP, indicating an overall prevalence of 493 per million population (95% confidence interval 282 to 801 per million).",
+    "The prevalence in those born in 1941-60 (733 per million, 269 to 1596 per million) did not differ significantly from those born between 1961 and 1985 (412 per million, 198 to 758 per million) and was similar in both sexes and across the three broad geographical areas sampled.",
+    "Genetic testing of the positive specimens for the genotype at PRNP codon 129 revealed a high proportion that were valine homozygous compared with the frequency in the normal population, and in stark contrast with confirmed clinical cases of vCJD, all of which were methionine homozygous at PRNP codon 129.   \n",
+    "CONCLUSIONS This study corroborates previous studies and suggests a high prevalence of infection with abnormal PrP, indicating vCJD carrier status in the population compared with the 177 vCJD cases to date.",
+    "These findings have important implications for the management of blood and blood products and for the handling of surgical instruments."
+   ],
+   "structured": true
+  },
+  {
+   "doc_id": 18174210,
+   "title": "Increased Microerythrocyte Count in Homozygous \u03b1+-Thalassaemia Contributes to Protection against Severe Malarial Anaemia",
+   "abstract": [
+    "BACKGROUND The heritable haemoglobinopathy alpha(+)-thalassaemia is caused by the reduced synthesis of alpha-globin chains that form part of normal adult haemoglobin (Hb).",
+    "Individuals homozygous for alpha(+)-thalassaemia have microcytosis and an increased erythrocyte count.",
+    "Alpha(+)-thalassaemia homozygosity confers considerable protection against severe malaria, including severe malarial anaemia (SMA) (Hb concentration < 50 g/l), but does not influence parasite count.",
+    "We tested the hypothesis that the erythrocyte indices associated with alpha(+)-thalassaemia homozygosity provide a haematological benefit during acute malaria.   \n",
+    "METHODS AND FINDINGS Data from children living on the north coast of Papua New Guinea who had participated in a case-control study of the protection afforded by alpha(+)-thalassaemia against severe malaria were reanalysed to assess the genotype-specific reduction in erythrocyte count and Hb levels associated with acute malarial disease.",
+    "We observed a reduction in median erythrocyte count of approximately 1.5 x 10(12)/l in all children with acute falciparum malaria relative to values in community children (p < 0.001).",
+    "We developed a simple mathematical model of the linear relationship between Hb concentration and erythrocyte count.",
+    "This model predicted that children homozygous for alpha(+)-thalassaemia lose less Hb than children of normal genotype for a reduction in erythrocyte count of >1.1 x 10(12)/l as a result of the reduced mean cell Hb in homozygous alpha(+)-thalassaemia.",
+    "In addition, children homozygous for alpha(+)-thalassaemia require a 10% greater reduction in erythrocyte count than children of normal genotype (p = 0.02) for Hb concentration to fall to 50 g/l, the cutoff for SMA.",
+    "We estimated that the haematological profile in children homozygous for alpha(+)-thalassaemia reduces the risk of SMA during acute malaria compared to children of normal genotype (relative risk 0.52; 95% confidence interval [CI] 0.24-1.12, p = 0.09).   \n",
+    "CONCLUSIONS The increased erythrocyte count and microcytosis in children homozygous for alpha(+)-thalassaemia may contribute substantially to their protection against SMA.",
+    "A lower concentration of Hb per erythrocyte and a larger population of erythrocytes may be a biologically advantageous strategy against the significant reduction in erythrocyte count that occurs during acute infection with the malaria parasite Plasmodium falciparum.",
+    "This haematological profile may reduce the risk of anaemia by other Plasmodium species, as well as other causes of anaemia.",
+    "Other host polymorphisms that induce an increased erythrocyte count and microcytosis may confer a similar advantage."
+   ],
+   "structured": true
+  },
+  {
+   "doc_id": 5953485,
+   "title": "ADAR1 Forms a Complex with Dicer to Promote MicroRNA Processing and RNA-Induced Gene Silencing",
+   "abstract": [
+    "Adenosine deaminases acting on RNA (ADARs) are involved in RNA editing that converts adenosine residues to inosine specifically in double-stranded RNAs.",
+    "In this study, we investigated the interaction of the RNA editing mechanism with the RNA interference (RNAi) machinery and found that ADAR1 forms a complex with Dicer through direct protein-protein interaction.",
+    "Most importantly, ADAR1 increases the maximum rate (Vmax) of pre-microRNA (miRNA) cleavage by Dicer and facilitates loading of miRNA onto RNA-induced silencing complexes, identifying a new role of ADAR1 in miRNA processing and RNAi mechanisms.",
+    "ADAR1 differentiates its functions in RNA editing and RNAi by the formation of either ADAR1/ADAR1 homodimer or Dicer/ADAR1 heterodimer complexes, respectively.",
+    "As expected, the expression of miRNAs is globally inhibited in ADAR1(-/-) mouse embryos, which, in turn, alters the expression of their target genes and might contribute to their embryonic lethal phenotype."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 12580014,
+   "title": "Keratin-dependent regulation of Aire and gene expression in skin tumor keratinocytes",
+   "abstract": [
+    "Expression of the intermediate filament protein keratin 17 (K17) is robustly upregulated in inflammatory skin diseases and in many tumors originating in stratified and pseudostratified epithelia.",
+    "We report that autoimmune regulator (Aire), a transcriptional regulator, is inducibly expressed in human and mouse tumor keratinocytes in a K17-dependent manner and is required for timely onset of Gli2-induced skin tumorigenesis in mice.",
+    "The induction of Aire mRNA in keratinocytes depends on a functional interaction between K17 and the heterogeneous nuclear ribonucleoprotein hnRNP K. Further, K17 colocalizes with Aire protein in the nucleus of tumor-prone keratinocytes, and each factor is bound to a specific promoter region featuring an NF-\u03baB consensus sequence in a relevant subset of K17- and Aire-dependent proinflammatory genes.",
+    "These findings provide radically new insight into keratin intermediate filament and Aire function, along with a molecular basis for the K17-dependent amplification of inflammatory and immune responses in diseased epithelia."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 45638119,
+   "title": "ALDH1 is a marker of normal and malignant human mammary stem cells and a predictor of poor clinical outcome.",
+   "abstract": [
+    "Application of stem cell biology to breast cancer research has been limited by the lack of simple methods for identification and isolation of normal and malignant stem cells.",
+    "Utilizing in vitro and in vivo experimental systems, we show that normal and cancer human mammary epithelial cells with increased aldehyde dehydrogenase activity (ALDH) have stem/progenitor properties.",
+    "These cells contain the subpopulation of normal breast epithelium with the broadest lineage differentiation potential and greatest growth capacity in a xenotransplant model.",
+    "In breast carcinomas, high ALDH activity identifies the tumorigenic cell fraction, capable of self-renewal and of generating tumors that recapitulate the heterogeneity of the parental tumor.",
+    "In a series of 577 breast carcinomas, expression of ALDH1 detected by immunostaining correlated with poor prognosis.",
+    "These findings offer an important new tool for the study of normal and malignant breast stem cells and facilitate the clinical application of stem cell concepts."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 49556906,
+   "title": "Metformin reverses established lung fibrosis in a bleomycin model",
+   "abstract": [
+    "Fibrosis is a pathological result of a dysfunctional repair response to tissue injury and occurs in a number of organs, including the lungs1.",
+    "Cellular metabolism regulates tissue repair and remodelling responses to injury2-4.",
+    "AMPK is a critical sensor of cellular bioenergetics and controls the switch from anabolic to catabolic metabolism5.",
+    "However, the role of AMPK in fibrosis is not well understood.",
+    "Here, we demonstrate that in humans with idiopathic pulmonary fibrosis (IPF) and in an experimental mouse model of lung fibrosis, AMPK activity is lower in fibrotic regions associated with metabolically active and apoptosis-resistant myofibroblasts.",
+    "Pharmacological activation of AMPK in myofibroblasts from lungs of humans with IPF display lower fibrotic activity, along with enhanced mitochondrial biogenesis and normalization of sensitivity to apoptosis.",
+    "In a bleomycin model of lung fibrosis in mice, metformin therapeutically accelerates the resolution of well-established fibrosis in an AMPK-dependent manner.",
+    "These studies implicate deficient AMPK activation in non-resolving, pathologic fibrotic processes, and support a role for metformin (or other AMPK activators) to reverse established fibrosis by facilitating deactivation and apoptosis of myofibroblasts."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 4709641,
+   "title": "Gain of toxic Apolipoprotein E4 effects in Human iPSC-Derived Neurons Is Ameliorated by a Small-Molecule Structure Corrector",
+   "abstract": [
+    "Efforts to develop drugs for Alzheimer's disease (AD) have shown promise in animal studies, only to fail in human trials, suggesting a pressing need to study AD in human model systems.",
+    "Using human neurons derived from induced pluripotent stem cells that expressed apolipoprotein E4 (ApoE4), a variant of the APOE gene product and the major genetic risk factor for AD, we demonstrated that ApoE4-expressing neurons had higher levels of tau phosphorylation, unrelated to their increased production of amyloid-\u03b2 (A\u03b2) peptides, and that they displayed GABAergic neuron degeneration.",
+    "ApoE4 increased A\u03b2 production in human, but not in mouse, neurons.",
+    "Converting ApoE4 to ApoE3 by gene editing rescued these phenotypes, indicating the specific effects of ApoE4.",
+    "Neurons that lacked APOE behaved similarly to those expressing ApoE3, and the introduction of ApoE4 expression recapitulated the pathological phenotypes, suggesting a gain of toxic effects from ApoE4.",
+    "Treatment of ApoE4-expressing neurons with a small-molecule structure corrector ameliorated the detrimental effects, thus showing that correcting the pathogenic conformation of ApoE4 is a viable therapeutic approach for ApoE4-related AD."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 5956380,
+   "title": "Exome sequencing identifies somatic gain-of-function PPM1D mutations in brainstem gliomas",
+   "abstract": [
+    "Gliomas arising in the brainstem and thalamus are devastating tumors that are difficult to surgically resect.",
+    "To determine the genetic and epigenetic landscape of these tumors, we performed exomic sequencing of 14 brainstem gliomas (BSGs) and 12 thalamic gliomas.",
+    "We also performed targeted mutational analysis of an additional 24 such tumors and genome-wide methylation profiling of 45 gliomas.",
+    "This study led to the discovery of tumor-specific mutations in PPM1D, encoding wild-type p53-induced protein phosphatase 1D (WIP1), in 37.5% of the BSGs that harbored hallmark H3F3A mutations encoding p.",
+    "Lys27Met substitutions.",
+    "PPM1D mutations were mutually exclusive with TP53 mutations in BSG and attenuated p53 activation in vitro.",
+    "PPM1D mutations were truncating alterations in exon 6 that enhanced the ability of PPM1D to suppress the activation of the DNA damage response checkpoint protein CHK2.",
+    "These results define PPM1D as a frequent target of somatic mutation and as a potential therapeutic target in brainstem gliomas."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 4414547,
+   "title": "Mosaic PPM1D mutations are associated with predisposition to breast and ovarian cancer",
+   "abstract": [
+    "Improved sequencing technologies offer unprecedented opportunities for investigating the role of rare genetic variation in common disease.",
+    "However, there are considerable challenges with respect to study design, data analysis and replication.",
+    "Using pooled next-generation sequencing of 507 genes implicated in the repair of DNA in 1,150 samples, an analytical strategy focused on protein-truncating variants (PTVs) and a large-scale sequencing case\u2013control replication experiment in 13,642 individuals, here we show that rare PTVs in the p53-inducible protein phosphatase PPM1D are associated with predisposition to breast cancer and ovarian cancer.",
+    "PPM1D PTV mutations were present in 25 out of 7,781 cases versus 1 out of 5,861 controls (P = 1.12 \u00d7 10\u22125), including 18 mutations in 6,912 individuals with breast cancer (P = 2.42 \u00d7 10\u22124) and 12 mutations in 1,121 individuals with ovarian cancer (P = 3.10 \u00d7 10\u22129).",
+    "Notably, all of the identified PPM1D PTVs were mosaic in lymphocyte DNA and clustered within a 370-base-pair region in the final exon of the gene, carboxy-terminal to the phosphatase catalytic domain.",
+    "Functional studies demonstrate that the mutations result in enhanced suppression of p53 in response to ionizing radiation exposure, suggesting that the mutant alleles encode hyperactive PPM1D isoforms.",
+    "Thus, although the mutations cause premature protein truncation, they do not result in the simple loss-of-function effect typically associated with this class of variant, but instead probably have a gain-of-function effect.",
+    "Our results have implications for the detection and management of breast and ovarian cancer risk.",
+    "More generally, these data provide new insights into the role of rare and of mosaic genetic variants in common conditions, and the use of sequencing in their identification."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 4381486,
+   "title": "Haematopoietic stem cells do not asymmetrically segregate chromosomes or retain BrdU",
+   "abstract": [
+    "Stem cells are proposed to segregate chromosomes asymmetrically during self-renewing divisions so that older (\u2018immortal\u2019) DNA strands are retained in daughter stem cells whereas newly synthesized strands segregate to differentiating cells.",
+    "Stem cells are also proposed to retain DNA labels, such as 5-bromo-2-deoxyuridine (BrdU), either because they segregate chromosomes asymmetrically or because they divide slowly.",
+    "However, the purity of stem cells among BrdU-label-retaining cells has not been documented in any tissue, and the \u2018immortal strand hypothesis\u2019 has not been tested in a system with definitive stem cell markers.",
+    "Here we tested these hypotheses in haematopoietic stem cells (HSCs), which can be highly purified using well characterized markers.",
+    "We administered BrdU to newborn mice, mice treated with cyclophosphamide and granulocyte colony-stimulating factor, and normal adult mice for 4 to 10 days, followed by 70 days without BrdU. In each case, less than 6% of HSCs retained BrdU and less than 0.5% of all BrdU-retaining haematopoietic cells were HSCs, revealing that BrdU has poor specificity and poor sensitivity as an HSC marker.",
+    "Sequential administration of 5-chloro-2-deoxyuridine and 5-iodo-2-deoxyuridine indicated that all HSCs segregate their chromosomes randomly.",
+    "Division of individual HSCs in culture revealed no asymmetric segregation of the label.",
+    "Thus, HSCs cannot be identified on the basis of BrdU-label retention and do not retain older DNA strands during division, indicating that these are not general properties of stem cells."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 6157837,
+   "title": "Renal considerations in angiotensin converting enzyme inhibitor therapy: a statement for healthcare professionals from the Council on the Kidney in Cardiovascular Disease and the Council for High Blood Pressure Research of the American Heart Association.",
+   "abstract": [
+    "Angiotensin converting enzyme (ACE) inhibitors are now one of the most frequently used classes of antihypertensive drugs.",
+    "Beyond their utility in the management of hypertension, their use has been extended to the long-term management of patients with congestive heart failure (CHF), as well as diabetic and nondiabetic nephropathies.",
+    "Although ACE inhibitor therapy usually improves renal blood flow (RBF) and sodium excretion rates in CHF and reduces the rate of progressive renal injury in chronic renal disease, its use can also be associated with a syndrome of \u201cfunctional renal insufficiency\u201d and/or hyperkalemia.",
+    "This form of acute renal failure (ARF) most commonly develops shortly after initiation of ACE inhibitor therapy but can be observed after months or years of therapy, even in the absence of prior ill effects.",
+    "ARF is most likely to occur when renal perfusion pressure cannot be sustained because of substantial decreases in mean arterial pressure (MAP) or when glomerular filtration rate (GFR) is highly angiotensin II (Ang II) dependent.",
+    "Conditions that predict an adverse hemodynamic effect of ACE inhibitors in patients with CHF are preexisting hypotension and low cardiac filling pressures.",
+    "The GFR is especially dependent on Ang II during extracellular fluid (ECF) volume depletion, high-grade bilateral renal artery stenosis, or stenosis of a dominant or single kidney, as in a renal transplant recipient.",
+    "Understanding the pathophysiological mechanisms and the common risk factors for ACE inhibitor\u2013induced functional ARF is critical, because preventive strategies for ARF exist, and if effectively used, they may permit use of these compounds in a less restricted fashion.  ",
+    "Under normal physiological conditions, renal autoregulation adjusts renal vascular resistance, so that RBF and GFR remain constant over a wide range of MAPs.1 The intrinsic renal autoregulation mechanism is adjusted by Ang II and the sympathetic nervous system.",
+    "When renal perfusion pressure falls (as in \u2026"
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 33872649,
+   "title": "Secondary aerosolization of viable Bacillus anthracis spores in a contaminated US Senate Office.",
+   "abstract": [
+    "CONTEXT Bioterrorist attacks involving letters and mail-handling systems in Washington, DC, resulted in Bacillus anthracis (anthrax) spore contamination in the Hart Senate Office Building and other facilities in the US Capitol's vicinity.   \n",
+    "OBJECTIVE To provide information about the nature and extent of indoor secondary aerosolization of B anthracis spores.   \n",
+    "DESIGN Stationary and personal air samples, surface dust, and swab samples were collected under semiquiescent (minimal activities) and then simulated active office conditions to estimate secondary aerosolization of B anthracis spores.",
+    "Nominal size characteristics, airborne concentrations, and surface contamination of B anthracis particles (colony-forming units) were evaluated.   \n",
+    "RESULTS Viable B anthracis spores reaerosolized under semiquiescent conditions, with a marked increase in reaerosolization during simulated active office conditions.",
+    "Increases were observed for B anthracis collected on open sheep blood agar plates (P<.001) and personal air monitors (P =.01) during active office conditions.",
+    "More than 80% of the B anthracis particles collected on stationary monitors were within an alveolar respirable size range of 0.95 to 3.5 micro m.   CONCLUSIONS Bacillus anthracis spores used in a recent terrorist incident reaerosolized under common office activities.",
+    "These findings have important implications for appropriate respiratory protection, remediation, and reoccupancy of contaminated office environments."
+   ],
+   "structured": true
+  },
+  {
+   "doc_id": 6372244,
+   "title": "Antibiotic-induced shifts in the mouse gut microbiome and metabolome increase susceptibility to Clostridium difficile infection",
+   "abstract": [
+    "Antibiotics can have significant and long-lasting effects on the gastrointestinal tract microbiota, reducing colonization resistance against pathogens including Clostridium difficile.",
+    "Here we show that antibiotic treatment induces substantial changes in the gut microbial community and in the metabolome of mice susceptible to C. difficile infection.",
+    "Levels of secondary bile acids, glucose, free fatty acids and dipeptides decrease, whereas those of primary bile acids and sugar alcohols increase, reflecting the modified metabolic activity of the altered gut microbiome.",
+    "In vitro and ex vivo analyses demonstrate that C. difficile can exploit specific metabolites that become more abundant in the mouse gut after antibiotics, including the primary bile acid taurocholate for germination, and carbon sources such as mannitol, fructose, sorbitol, raffinose and stachyose for growth.",
+    "Our results indicate that antibiotic-mediated alteration of the gut microbiome converts the global metabolic profile to one that favours C. difficile germination and growth."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 4883040,
+   "title": "Antiretroviral Therapy for Prevention of Tuberculosis in Adults with HIV: A Systematic Review and Meta-Analysis",
+   "abstract": [
+    "BACKGROUND Human immunodeficiency virus (HIV) infection is the strongest risk factor for developing tuberculosis and has fuelled its resurgence, especially in sub-Saharan Africa.",
+    "In 2010, there were an estimated 1.1 million incident cases of tuberculosis among the 34 million people living with HIV worldwide.",
+    "Antiretroviral therapy has substantial potential to prevent HIV-associated tuberculosis.",
+    "We conducted a systematic review of studies that analysed the impact of antiretroviral therapy on the incidence of tuberculosis in adults with HIV infection.   \n",
+    "METHODS AND FINDINGS PubMed, Embase, African Index Medicus, LILACS, and clinical trial registries were systematically searched.",
+    "Randomised controlled trials, prospective cohort studies, and retrospective cohort studies were included if they compared tuberculosis incidence by antiretroviral therapy status in HIV-infected adults for a median of over 6 mo in developing countries.",
+    "For the meta-analyses there were four categories based on CD4 counts at antiretroviral therapy initiation: (1) less than 200 cells/\u00b5l, (2) 200 to 350 cells/\u00b5l, (3) greater than 350 cells/\u00b5l, and (4) any CD4 count.",
+    "Eleven studies met the inclusion criteria.",
+    "Antiretroviral therapy is strongly associated with a reduction in the incidence of tuberculosis in all baseline CD4 count categories: (1) less than 200 cells/\u00b5l (hazard ratio [HR] 0.16, 95% confidence interval [CI] 0.07 to 0.36), (2) 200 to 350 cells/\u00b5l (HR 0.34, 95% CI 0.19 to 0.60), (3) greater than 350 cells/\u00b5l (HR 0.43, 95% CI 0.30 to 0.63), and (4) any CD4 count (HR 0.35, 95% CI 0.28 to 0.44).",
+    "There was no evidence of hazard ratio modification with respect to baseline CD4 count category (p = 0.20).   \n",
+    "CONCLUSIONS Antiretroviral therapy is strongly associated with a reduction in the incidence of tuberculosis across all CD4 count strata.",
+    "Earlier initiation of antiretroviral therapy may be a key component of global and national strategies to control the HIV-associated tuberculosis syndemic.   ",
+    "REVIEW REGISTRATION International Prospective Register of Systematic Reviews CRD42011001209 Please see later in the article for the Editors' Summary."
+   ],
+   "structured": true
+  },
+  {
+   "doc_id": 27768226,
+   "title": "Open Access Increases Citation Rate",
+   "abstract": [
+    "PLoS Biology publishes today a research article by Gunther Eysenbach that is not about biology.",
+    "It is about citations.",
+    "It provides robust evidence that open-access articles (OA articles) are more immediately recognized and cited than non-OA articles.",
+    "As such, it adds objective support to the belief we have always held that open-access publication speeds up scientific dialog between researchers and, consequently, should be extended to the whole scientific literature as quickly as possible.",
+    "It is therefore fitting that we publish such a paper.    ",
+    "We have long argued that papers freely available in a journal will be more often read and cited than those behind a subscription barrier.",
+    "However, solid evidence to support or refute such a claim has been surprisingly hard to find.",
+    "Since most open-access journals are new, comparisons of the effects of open access with established subscription-based journals are easily confounded by age and reputation.",
+    "In the current study, Eysenbach compared citations compiled by Thomson Scientific (formerly Thomson ISI) to individual articles published between June 2004 and December 2004 in the same journal\u2014namely, Proceedings of the National Academy of Sciences (PNAS), which announced its open-access option for authors on June 8 of that year, with an associated publication charge of US$1,000.",
+    "Non-OA articles in PNAS are subject to a six-month \u201ctoll-access\u201d delay before the article becomes publicly available.",
+    "The results of this natural experiment are clear: in the 4 to 16 months following publication, OA articles gained a significant citation advantage over non-OA articles during the same period.",
+    "They are twice as likely to be cited 4 to 10 months after publication and almost three times as likely between 10 and 16 months.",
+    "Given that PNAS delays open access for only six months, the disparity between OA and non-OA articles in journals where the delay is longer or where articles remain \u201ctoll-access\u201d is likely to be even greater.    ",
+    "Eysenbach also looked at the impact of self-archiving non-OA articles.",
+    "One route to open access, it is argued, is for authors to archive their published articles on their own Web sites or in institutional repositories, although this does not include an explicit business model to cover the cost of peer-review and publishing.",
+    "The analysis revealed that self-archived articles are also cited less often than OA articles from the same journal.    ",
+    "Yes, you're right; we do have a strong and vested interest in publishing results that so obviously endorse our existence.",
+    "Moreover, the author of the article is also an editor of an open-access journal.",
+    "But sometimes a potential conflict of interest can actually help to ensure rigor.",
+    "In this case, we have an acute interest in ensuring that the article meets the same, if not higher, standards as any other research article we publish.",
+    "Not only must the conclusions provide a significant advance for the field, but the study must be technically sound, with appropriate evidence to support those conclusions.",
+    "As with all our research articles, we consulted throughout the evaluation process with an academic editor with appropriate expertise\u2014in this case, Carol Tenopir, professor of information sciences at the University of Tennessee (Knoxville, Tennessee, United States).",
+    "The article was reviewed by two experts in bibliometric analyses and information science, and an experienced research biologist with expertise in statistics.",
+    "They all enthusiastically supported publication, although one understandably questioned the suitability of PLoS Biology as the publication venue.    ",
+    "We have no intention of making PLoS Biology a regular home for bibliometric studies (even when about open access).",
+    "What makes this study worth publishing in PLoS Biology is not only the relative strength of evidence supporting the claim but also the extent to which many (especially other publishers) have anticipated such an analysis.",
+    "As far as we are aware, no other study has compared OA and non-OA articles from the same journal and controlled for so many potentially confounding factors.",
+    "Eysenbach's multivariate analysis took into account the number of days since publication, number of authors, article type, country of the corresponding author, funding type, subject area, submission track ( PNAS has three different ways that authors can submit a paper), and the previous citation record of the first and last authors.",
+    "He even administered a supplementary questionnaire to assess whether authors choosing the OA option in PNAS chose to do so for only their most important research (they didn't).",
+    "As Ian Rowlands from the Centre for Publishing at University College London\u2014and one of the reviewers who agreed to be identified in this article\u2014said at the start of his review:          \u201cMany (most) of the papers and presentations I have read/seen on this topic have completely failed to address the kinds of confounding issues that are so convincingly tackled here.",
+    "For that reason alone, this paper deserves to be published and alerted to the widest possible audience.",
+    "\u201d          In addition to providing evidence for the immediate advantage of open access, Eysenbach's analysis also highlights several potential challenges to its long-term future.",
+    "Although a limited dataset, the citation history of the first and last authors differed between those who chose the open-access option and those who did not.",
+    "In the group that chose open access, last authors tended to have a \u201cstronger\u201d previous citation record, whereas this situation was reversed among the group that declined the open-access option\u2014here, it was the first authors who tended to be stronger.",
+    "This may reflect varying attitudes of authors at different stages of their career, a stronger influence from the leader of a particular group, or an age- or career-related difference in the ability to pay the publication charge (e.g., [ 1]).",
+    "Indeed, access to appropriate funds may also be a reason why a lower proportion of authors from European countries tended to choose the open-access option.",
+    "In many of these countries, funds for page charges\u2014and, by extension, open-access publication fees\u2014are often not included within research grants.    ",
+    "PNAS was one of the first journals to offer an open-access option to its authors.",
+    "However, such hybrid journals are increasing: Blackwell, Springer, and Oxford University Press now provide this option as well.",
+    "This means that similar experiments can be replicated.",
+    "Moreover, although the evidence from the current analysis argues most strongly for a time advantage in citation for OA articles, a study over longer periods will reveal whether this translates into a sustained increase in the number of citations.",
+    "In the meantime, open-access advocates should be emboldened by tangible evidence for what has seemed obvious all along."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 16280642,
+   "title": "Sequential signals toward podosome formation in NIH-src cells",
+   "abstract": [
+    "Podosomes (also termed invadopodia in cancer cells) are actin-rich adhesion structures with matrix degradation activity that develop in various cell types.",
+    "Despite their significant physiological importance, the molecular mechanism of podosome formation is largely unknown.",
+    "In this study, we investigated the molecular mechanisms of podosome formation.",
+    "The expression of various phosphoinositide-binding domains revealed that the podosomes in Src-transformed NIH3T3 (NIH-src) cells are enriched with PtdIns(3,4)P2, suggesting an important role of this phosphoinositide in podosome formation.",
+    "Live-cell imaging analysis revealed that Src-expression stimulated podosome formation at focal adhesions of NIH3T3 cells after PtdIns(3,4)P2 accumulation.",
+    "The adaptor protein Tks5/FISH, which is essential for podosome formation, was found to form a complex with Grb2 at adhesion sites in an Src-dependent manner.",
+    "Further, it was found that N-WASP bound all SH3 domains of Tks5/FISH, which facilitated circular podosome formation.",
+    "These results indicate that augmentation of the N-WASP-Arp2/3 signal was accomplished on the platform of Tks5/FISH-Grb2 complex at focal adhesions, which is stabilized by PtdIns(3,4)P2."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 26016929,
+   "title": "Effectiveness of screening older people for impaired vision in community setting: systematic review of evidence from randomised controlled trials.",
+   "abstract": [
+    "OBJECTIVE To assess whether population screening for impaired vision among older people in the community leads to improvements in vision.   \n",
+    "DESIGN Systematic review of randomised controlled trials of population screening in the community that included any assessment of vision or visual function with at least 6 months' follow up.   ",
+    "SUBJECTS Adults aged 65 or over.   \n",
+    "MAIN OUTCOME MEASURE Proportions with visual impairment in intervention and control groups with any method of assessing visual impairment.   \n",
+    "RESULTS There were no trials that primarily assessed visual screening.",
+    "Outcome data on vision were available for 3494 people in five trials of multiphasic assessment.",
+    "All the trials used self reported measures for vision impairment, both as screening tools and as outcome measures.",
+    "The inclusion of a visual screening component in the assessment did not result in improvements in self reported visual problems (pooled odds ratio 1.04:95% confidence interval 0.89 to 1.22).",
+    "A small reduction (11%) in the number of older people with self reported visual problems cannot be excluded.   \n",
+    "CONCLUSIONS Screening of asymptomatic older people in the community is not justified on present evidence.",
+    "Visual impairment in this age group can usually be reduced with treatment.",
+    "It is unclear why no benefit was seen.",
+    "Further work is needed to clarify what interventions are appropriate for older people with unreported impairment of vision."
+   ],
+   "structured": true
+  },
+  {
+   "doc_id": 14437255,
+   "title": "Congruent Visual Speech Enhances Cortical Entrainment to Continuous Auditory Speech in Noise-Free Conditions.",
+   "abstract": [
+    "UNLABELLED Congruent audiovisual speech enhances our ability to comprehend a speaker, even in noise-free conditions.",
+    "When incongruent auditory and visual information is presented concurrently, it can hinder a listener's perception and even cause him or her to perceive information that was not presented in either modality.",
+    "Efforts to investigate the neural basis of these effects have often focused on the special case of discrete audiovisual syllables that are spatially and temporally congruent, with less work done on the case of natural, continuous speech.",
+    "Recent electrophysiological studies have demonstrated that cortical response measures to continuous auditory speech can be easily obtained using multivariate analysis methods.",
+    "Here, we apply such methods to the case of audiovisual speech and, importantly, present a novel framework for indexing multisensory integration in the context of continuous speech.",
+    "Specifically, we examine how the temporal and contextual congruency of ongoing audiovisual speech affects the cortical encoding of the speech envelope in humans using electroencephalography.",
+    "We demonstrate that the cortical representation of the speech envelope is enhanced by the presentation of congruent audiovisual speech in noise-free conditions.",
+    "Furthermore, we show that this is likely attributable to the contribution of neural generators that are not particularly active during unimodal stimulation and that it is most prominent at the temporal scale corresponding to syllabic rate (2-6 Hz).",
+    "Finally, our data suggest that neural entrainment to the speech envelope is inhibited when the auditory and visual streams are incongruent both temporally and contextually.   ",
+    "SIGNIFICANCE STATEMENT Seeing a speaker's face as he or she talks can greatly help in understanding what the speaker is saying.",
+    "This is because the speaker's facial movements relay information about what the speaker is saying, but also, importantly, when the speaker is saying it.",
+    "Studying how the brain uses this timing relationship to combine information from continuous auditory and visual speech has traditionally been methodologically difficult.",
+    "Here we introduce a new approach for doing this using relatively inexpensive and noninvasive scalp recordings.",
+    "Specifically, we show that the brain's representation of auditory speech is enhanced when the accompanying visual speech signal shares the same timing.",
+    "Furthermore, we show that this enhancement is most pronounced at a time scale that corresponds to mean syllable length."
+   ],
+   "structured": false
+  },
+  {
+   "doc_id": 10582939,
+   "title": "Induction therapy with autologous mesenchymal stem cells in living-related kidney transplants: a randomized controlled trial.",
+   "abstract": [
+    "CONTEXT Antibody-based induction therapy plus calcineurin inhibitors (CNIs) reduce acute rejection rates in kidney recipients; however, opportunistic infections and toxic CNI effects remain challenging.",
+    "Reportedly, mesenchymal stem cells (MSCs) have successfully treated graft-vs-host disease.   \n",
+    "OBJECTIVE To assess autologous MSCs as replacement of antibody induction for patients with end-stage renal disease who undergo ABO-compatible, cross-match-negative kidney transplants from a living-related donor.   \n",
+    "DESIGN, SETTING, AND PATIENTS One hundred fifty-nine patients were enrolled in this single-site, prospective, open-label, randomized study from February 2008-May 2009, when recruitment was completed.   \n",
+    "INTERVENTION Patients were inoculated with marrow-derived autologous MSC (1-2 x 10(6)/kg) at kidney reperfusion and two weeks later.",
+    "Fifty-three patients received standard-dose and 52 patients received low-dose CNIs (80% of standard); 51 patients in the control group received anti-IL-2 receptor antibody plus standard-dose CNIs.   \n",
+    "MAIN OUTCOME MEASURES The primary measure was 1-year incidence of acute rejection and renal function (estimated glomerular filtration rate [eGFR]); the secondary measure was patient and graft survival and incidence of adverse events.   \n",
+    "RESULTS Patient and graft survival at 13 to 30 months was similar in all groups.",
+    "After 6 months, 4 of 53 patients (7.5%) in the autologous MSC plus standard-dose CNI group (95% CI, 0.4%-14.7%; P = .04) and 4 of 52 patients (7.7%) in the low-dose group (95% CI, 0.5%-14.9%; P = .046) compared with 11 of 51 controls (21.6%; 95% CI, 10.5%-32.6%) had biopsy-confirmed acute rejection.",
+    "None of the patients in either autologous MSC group had glucorticoid-resistant rejection, whereas 4 patients (7.8%) in the control group did (95% CI, 0.6%-15.1%; overall P = .02).",
+    "Renal function recovered faster among both MSC groups showing increased eGFR levels during the first month after surgery than the control group.",
+    "Patients receiving standard-dose CNI had a mean difference of 6.2 mL/min per 1.73 m(2) (95% CI, 0.4-11.9; P=.04) and those in the low-dose CNI of 10.0 mL/min per 1.73 m(2) (95% CI, 3.8-16.2; P=.002).",
+    "Also, during the 1-year follow-up, combined analysis of MSC-treated groups revealed significantly decreased risk of opportunistic infections than the control group (hazard ratio, 0.42; 95% CI, 0.20-0.85, P=.02)   CONCLUSION Among patients undergoing renal transplant, the use of autologous MSCs compared with anti-IL-2 receptor antibody induction therapy resulted in lower incidence of acute rejection, decreased risk of opportunistic infection, and better estimated renal function at 1 year.   \n",
+    "TRIAL REGISTRATION clinicaltrials.gov Identifier: NCT00658073."
+   ],
+   "structured": true
+  }
+ ],
+ "claims": [
+  {
+   "id": 3,
+   "claim": "1,000 genomes project enables mapping of genetic sequence variation consisting of rare variants with larger penetrance effects than common variants.",
+   "labels": [
+    [
+     14717500,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 5,
+   "claim": "1/2000 in UK have abnormal PrP positivity.",
+   "labels": [
+    [
+     13734012,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 42,
+   "claim": "A high microerythrocyte count raises vulnerability to severe anemia in homozygous alpha (+)- thalassemia trait subjects.",
+   "labels": [
+    [
+     18174210,
+     "CONTRADICT"
+    ]
+   ]
+  },
+  {
+   "id": 48,
+   "claim": "A total of 1,000 people in the UK are asymptomatic carriers of vCJD infection.",
+   "labels": [
+    [
+     13734012,
+     "CONTRADICT"
+    ]
+   ]
+  },
+  {
+   "id": 49,
+   "claim": "ADAR1 binds to Dicer to cleave pre-miRNA.",
+   "labels": [
+    [
+     5953485,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 50,
+   "claim": "AIRE is expressed in some skin tumors.",
+   "labels": [
+    [
+     12580014,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 51,
+   "claim": "ALDH1 expression is associated with better breast cancer outcomes.",
+   "labels": [
+    [
+     45638119,
+     "CONTRADICT"
+    ]
+   ]
+  },
+  {
+   "id": 53,
+   "claim": "ALDH1 expression is associated with poorer prognosis in breast cancer.",
+   "labels": [
+    [
+     45638119,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 54,
+   "claim": "AMP-activated protein kinase (AMPK) activation increases inflammation-related fibrosis in the lungs.",
+   "labels": [
+    [
+     49556906,
+     "CONTRADICT"
+    ]
+   ]
+  },
+  {
+   "id": 56,
+   "claim": "APOE4 expression in iPSC-derived neurons increases AlphaBeta production and tau phosphorylation causing GABA neuron degeneration.",
+   "labels": [
+    [
+     4709641,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 57,
+   "claim": "APOE4 expression in iPSC-derived neurons increases AlphaBeta production and tau phosphorylation, delaying GABA neuron degeneration.",
+   "labels": [
+    [
+     4709641,
+     "CONTRADICT"
+    ]
+   ]
+  },
+  {
+   "id": 70,
+   "claim": "Activation of PPM1D suppresses p53 function.",
+   "labels": [
+    [
+     5956380,
+     "SUPPORT"
+    ],
+    [
+     4414547,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 100,
+   "claim": "All hematopoietic stem cells segregate their chromosomes randomly.",
+   "labels": [
+    [
+     4381486,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 113,
+   "claim": "Angiotensin converting enzyme inhibitors are associated with increased risk for functional renal insufficiency.",
+   "labels": [
+    [
+     6157837,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 115,
+   "claim": "Anthrax spores can be disposed of easily after they are dispersed.",
+   "labels": [
+    [
+     33872649,
+     "CONTRADICT"
+    ]
+   ]
+  },
+  {
+   "id": 118,
+   "claim": "Antibiotic induced alterations in the gut microbiome reduce resistance against Clostridium difficile",
+   "labels": [
+    [
+     6372244,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 124,
+   "claim": "Antiretroviral therapy reduces rates of tuberculosis across a broad range of CD4 strata.",
+   "labels": [
+    [
+     4883040,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 129,
+   "claim": "Articles published in open access format are less likely to be cited than traditional journals.",
+   "labels": [
+    [
+     27768226,
+     "CONTRADICT"
+    ]
+   ]
+  },
+  {
+   "id": 130,
+   "claim": "Articles published in open access format are more likely to be cited than traditional journals.",
+   "labels": [
+    [
+     27768226,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 133,
+   "claim": "Assembly of invadopodia is triggered by focal generation of phosphatidylinositol-3,4-biphosphate and the activation of the nonreceptor tyrosine kinase Src.",
+   "labels": [
+    [
+     16280642,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 137,
+   "claim": "Asymptomatic visual impairment screening in elderly populations does not lead to improved vision.",
+   "labels": [
+    [
+     26016929,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 141,
+   "claim": "Auditory entrainment is strengthened when people see congruent visual and auditory information.",
+   "labels": [
+    [
+     14437255,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 142,
+   "claim": "Autologous transplantation of mesenchymal stem cells causes a higher rate of opportunistic infections than induction therapy with anti-interleukin-2 receptor antibodies.",
+   "labels": [
+    [
+     10582939,
+     "CONTRADICT"
+    ]
+   ]
+  },
+  {
+   "id": 143,
+   "claim": "Autologous transplantation of mesenchymal stem cells causes fewer opportunistic infections than induction therapy with anti-interleukin-2 receptor antibodies.",
+   "labels": [
+    [
+     10582939,
+     "SUPPORT"
+    ]
+   ]
+  },
+  {
+   "id": 146,
+   "claim": "Autologous transplantation of mesenchymal stem cells has lower rates of rejection than induction therapy with anti-interleukin-2 receptor antibodies.",
+   "labels": [
+    [
+     10582939,
+     "SUPPORT"
+    ]
+   ]
+  }
+ ]
+}
