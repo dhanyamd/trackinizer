@@ -6,10 +6,8 @@ command grammar (that is `trax/SKILL.md`, `../grammar.lark`, `../GRAMMAR.md`),
 but the **content expectations** — what makes a well-formed, complete instance of
 each kind.
 
-The children nest UNDER `trax/`, one directory per instantiable kind, each
-holding a `SKILL.md`. Nesting is not cosmetic: the codex CLI's loader skips a
-skill whose `SKILL.md` is a symlink, so the whole tree has to be reachable
-through ONE directory symlink from `.sagent/skills/trax`.
+The children nest under `trax/`, one directory per inquiry kind, each holding a
+`SKILL.md`. The router links to them using relative paths.
 
 | Kind | File | Owns |
 |---|---|---|
@@ -30,3 +28,10 @@ Rules for these docs:
   never fabricate, never leave a placeholder (e.g. a `-01-01` date).
 
 `trax/SKILL.md` is the router: grammar, workflow, and a pointer into this dir.
+
+Install with `trax install --target claude|cursor|codex`. User installs use
+`~/.claude/skills`, `~/.cursor/skills`, and `~/.agents/skills`, respectively.
+Add `--project` to use the same directory beneath the current project.
+The installer copies the router, child skills, and both grammar manuals, so
+the guidance remains available after the package is upgraded or removed.
+Use `--dry-run` to preview installation or `--uninstall --dry-run` to preview removal.

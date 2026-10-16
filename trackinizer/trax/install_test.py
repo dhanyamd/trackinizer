@@ -1,107 +1,209 @@
-"""``install``/``uninstall``: skill-tree delivery to agent skill directories.
-
-Exercised with the real bundled skill tree against a fake home / temp project
-root: the copy must be complete (SKILL.md + per-kind child skills), idempotent
-(wholesale replace so stale child skills cannot survive an upgrade), and
-reversible. Dry-run writes nothing. Cursor/codex read project-local skills
-only, so a user-scope install for them is refused.
-"""
+"""Skill installation preserves working trees and delivers portable bundles."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Never
 
 import pytest
 
 from trackinizer.trax.cli import parse_and_run
-from trackinizer.trax.install import (
-    TARGETS,
-    InstallError,
-    install,
-    uninstall,
-)
+from trackinizer.trax.install import TARGETS, InstallError, install, uninstall
 
 import trackinizer.trax.install as install_module
 
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from collections.abc import Callable
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def fake_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """Point ``Path.home`` at a temp dir so user-scope installs are isolated."""
+    """Isolate every install test, including error paths, from real skills."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setattr(
-        "trackinizer.trax.install.Path.home",
-        lambda: home,
-    )
+    monkeypatch.setattr("trackinizer.trax.install.Path.home", lambda: home)
     return home
 
 
-def test_installs_user_scope_tree_with_child_skills(fake_home: Path) -> None:
-    dest, count = install(TARGETS["claude"])
-    assert dest == fake_home / ".claude/skills/trax"
-    assert (dest / "SKILL.md").is_file()
-    # per-kind child skills stay nested under trax/ (reachable only through it)
-    assert (dest / "belief" / "SKILL.md").is_file()
-    assert (dest / "paper" / "SKILL.md").is_file()
-    assert count >= 3
+@pytest.mark.parametrize(
+    ("target", "directory"),
+    [("claude", ".claude"), ("cursor", ".cursor"), ("codex", ".agents")],
+)
+@pytest.mark.parametrize("project", [False, True])
+def test_supported_destinations(
+    target: str,
+    directory: str,
+    *,
+    project: bool,
+    fake_home: Path,
+    tmp_path: Path,
+) -> None:
+    destination, count = install(TARGETS[target], project=project, root=tmp_path)
+    assert (
+        destination == (tmp_path if project else fake_home) / directory / "skills/trax"
+    )
+    assert (destination / "belief/SKILL.md").is_file()
+    assert count == sum(path.is_file() for path in destination.rglob("*"))
+
+
+def test_installed_bundle_is_self_contained() -> None:
+    destination, _ = install(TARGETS["claude"])
+    docs = Path(install_module.__file__).parent / "docs"
+    source = docs / "skills/trax"
+    expected = {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+    expected.update(
+        {
+            Path(name): (docs / name).read_bytes()
+            for name in ("grammar.lark", "GRAMMAR.md")
+        },
+    )
+    actual = {
+        path.relative_to(destination): path.read_bytes()
+        for path in destination.rglob("*")
+        if path.is_file()
+    }
+    assert actual == expected
+    skill = (destination / "SKILL.md").read_text()
+    assert "`trackinizer/trax/docs/{grammar.lark,GRAMMAR.md}`" not in skill
+    assert "`trackinizer/trax/docs/skills/trax/<kind>/SKILL.md`" not in skill
+    assert "<kind>/SKILL.md" in skill
 
 
 def test_dry_run_reports_without_writing(fake_home: Path) -> None:
-    _dest, count = install(TARGETS["claude"], dry_run=True)
+    destination, count = install(TARGETS["claude"], dry_run=True)
     assert count > 0
-    # the destination tree specifically is untouched
-    assert not (fake_home / ".claude" / "skills").exists()
+    assert destination == fake_home / ".claude/skills/trax"
+    assert not destination.parent.exists()
 
 
-@pytest.mark.usefixtures("fake_home")
 def test_reinstall_replaces_wholesale() -> None:
-    """A stale child skill from a previous version cannot survive an upgrade."""
-    dest, _ = install(TARGETS["claude"])
-    stale = dest / "stale-kind" / "SKILL.md"
-    stale.parent.mkdir(parents=True)
+    destination, _ = install(TARGETS["claude"])
+    stale = destination / "stale-kind/SKILL.md"
+    stale.parent.mkdir()
     stale.write_text("obsolete")
-
-    dest2, count2 = install(TARGETS["claude"])
-    assert dest2 == dest
-    assert count2 >= 3
+    assert install(TARGETS["claude"])[0] == destination
     assert not stale.exists()
 
 
-@pytest.mark.usefixtures("fake_home")
 def test_uninstall_removes_then_reports_absent() -> None:
-    install(TARGETS["claude"])
-    removed = uninstall(TARGETS["claude"])
-    assert removed is not None
-    assert not removed.exists()
+    destination, _ = install(TARGETS["claude"])
+    assert uninstall(TARGETS["claude"]) == destination
+    assert not destination.exists()
     assert uninstall(TARGETS["claude"]) is None
 
 
-def test_project_scope_installs_under_root(tmp_path: Path) -> None:
-    dest, count = install(TARGETS["cursor"], project=True, root=tmp_path)
-    assert dest == tmp_path / ".cursor/skills/trax"
-    assert (dest / "SKILL.md").is_file()
-    assert count >= 2
-    # removing via the same scope clears it
-    assert uninstall(TARGETS["cursor"], project=True, root=tmp_path) is not None
+@pytest.mark.parametrize("installed", [False, True])
+def test_uninstall_dry_run_preserves_destination(
+    *,
+    installed: bool,
+    fake_home: Path,
+) -> None:
+    destination = fake_home / ".claude/skills/trax"
+    if installed:
+        install(TARGETS["claude"])
+    assert uninstall(TARGETS["claude"], dry_run=True) == (
+        destination if installed else None
+    )
+    assert destination.exists() == installed
+    assert destination.parent.exists() == installed
 
 
-@pytest.mark.usefixtures("fake_home")
-def test_user_scope_refused_for_project_only_agents() -> None:
-    """Cursor/codex read project-local skills only; a user install is a mistake."""
-    with pytest.raises(InstallError, match="project-local"):
-        install(TARGETS["cursor"])
+@pytest.mark.parametrize("dangling", [False, True])
+@pytest.mark.parametrize("operation", ["install", "uninstall", "dry-uninstall"])
+def test_destination_symlinks_preserve_targets(
+    tmp_path: Path,
+    fake_home: Path,
+    *,
+    dangling: bool,
+    operation: str,
+) -> None:
+    target = tmp_path / "shared-skills"
+    if not dangling:
+        target.mkdir()
+        (target / "sentinel").write_text("keep")
+    destination = fake_home / ".claude/skills/trax"
+    destination.parent.mkdir(parents=True)
+    destination.symlink_to(target, target_is_directory=True)
+    if operation == "install":
+        install(TARGETS["claude"])
+        assert not destination.is_symlink()
+        assert (destination / "SKILL.md").is_file()
+    else:
+        assert (
+            uninstall(TARGETS["claude"], dry_run=operation == "dry-uninstall")
+            == destination
+        )
+        assert destination.is_symlink() == (operation == "dry-uninstall")
+    assert target.exists() != dangling
+    if not dangling:
+        assert (target / "sentinel").read_text() == "keep"
 
 
-def test_every_target_installs_project_scope(tmp_path: Path) -> None:
-    """The multi-target table stays honest: each target's layout lands."""
-    for target in TARGETS.values():
-        dest, count = install(target, project=True, root=tmp_path / target.name)
-        assert (dest / "SKILL.md").is_file()
-        assert count >= 2
+def test_copy_failure_preserves_working_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination, _ = install(TARGETS["claude"])
+    sentinel = destination / "sentinel"
+    sentinel.write_text("old installation")
+    monkeypatch.setattr("trackinizer.trax.install.shutil.copytree", _copy_failed)
+    with pytest.raises(InstallError, match="copy failed"):
+        install(TARGETS["claude"])
+    assert sentinel.read_text() == "old installation"
+    assert (destination / "SKILL.md").is_file()
+    assert sorted(path.name for path in destination.parent.iterdir()) == ["trax"]
+
+
+def test_publish_failure_rolls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    destination, _ = install(TARGETS["claude"])
+    (destination / "sentinel").write_text("old installation")
+    real_rename = Path.rename
+    monkeypatch.setattr(Path, "rename", _failing_rename(real_rename, rollback=False))
+    with pytest.raises(InstallError, match="publish failed"):
+        install(TARGETS["claude"])
+    assert (destination / "sentinel").read_text() == "old installation"
+    assert sorted(path.name for path in destination.parent.iterdir()) == ["trax"]
+
+
+def test_failed_rollback_retains_recoverable_backup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination, _ = install(TARGETS["claude"])
+    (destination / "sentinel").write_text("old installation")
+    monkeypatch.setattr(Path, "rename", _failing_rename(Path.rename, rollback=True))
+    with pytest.raises(InstallError, match="previous") as error:
+        install(TARGETS["claude"])
+    backups = list(destination.parent.glob(".trax-*/previous/sentinel"))
+    assert len(backups) == 1
+    assert backups[0].read_text() == "old installation"
+    assert str(backups[0].parent) in str(error.value)
+
+
+@pytest.mark.parametrize("missing", ["SKILL.md", "grammar.lark", "GRAMMAR.md"])
+def test_missing_bundle_preserves_working_install(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    missing: str,
+) -> None:
+    destination, _ = install(TARGETS["claude"])
+    sentinel = destination / "sentinel"
+    sentinel.write_text("keep")
+    package = tmp_path / "package"
+    skills = package / "docs/skills/trax"
+    skills.mkdir(parents=True)
+    for name in ("SKILL.md", "grammar.lark", "GRAMMAR.md"):
+        if name != missing:
+            ((skills if name == "SKILL.md" else package / "docs") / name).write_text(
+                "bundled",
+            )
+    monkeypatch.setattr(install_module, "__file__", str(package / "install.py"))
+    with pytest.raises(InstallError, match="bundled"):
+        install(TARGETS["claude"])
+    assert sentinel.read_text() == "keep"
 
 
 def test_cli_installs_and_uninstalls_without_server(
@@ -109,41 +211,34 @@ def test_cli_installs_and_uninstalls_without_server(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Keep the install verb integrated with the current CLI dispatcher."""
     monkeypatch.chdir(tmp_path)
     args = ["install", "--target", "cursor", "--project"]
-    destination = tmp_path / ".cursor" / "skills" / "trax"
-    parse_and_run(
-        [*args, "--dry-run"],
-        client_factory=lambda: pytest.fail("install must not contact the server"),
-    )
+    destination = tmp_path / ".cursor/skills/trax"
+    parse_and_run([*args, "--dry-run"], client_factory=_unexpected_server)
     assert not destination.exists()
     assert "would install:" in capsys.readouterr().out
-    parse_and_run(
-        args,
-        client_factory=lambda: pytest.fail("install must not contact the server"),
-    )
+    parse_and_run(args, client_factory=_unexpected_server)
     assert (destination / "SKILL.md").is_file()
-    parse_and_run(
-        [*args, "--uninstall"],
-        client_factory=lambda: pytest.fail("install must not contact the server"),
-    )
+    parse_and_run([*args, "--uninstall"], client_factory=_unexpected_server)
     assert not destination.exists()
 
 
-def test_install_error_is_raised_when_bundled_skills_missing(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """A package shipped without its skills fails loudly, not silently."""
-    empty_bundle = tmp_path / "bundle-without-skills"
-    empty_bundle.mkdir()
-    monkeypatch.setattr(
-        install_module,
-        "bundled_skills",
-        lambda: empty_bundle,
-    )
-    # the bundle exists but has no trax/SKILL.md: the copy fails loudly as an
-    # InstallError rather than silently writing an empty tree
-    with pytest.raises(InstallError):
-        install(TARGETS["claude"])
+def _copy_failed(*_args: object, **_kwargs: object) -> None:
+    raise OSError("copy failed")
+
+
+def _failing_rename(
+    original: Callable[[Path, Path], Path],
+    *,
+    rollback: bool,
+) -> Callable[[Path, Path], Path]:
+    def rename(path: Path, target: Path) -> Path:
+        if path.name in ({"replacement", "previous"} if rollback else {"replacement"}):
+            raise OSError("publish failed")
+        return original(path, target)
+
+    return rename
+
+
+def _unexpected_server() -> Never:
+    pytest.fail("install must not contact the server")

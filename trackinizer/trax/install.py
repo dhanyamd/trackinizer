@@ -6,9 +6,8 @@ where no agent looks -- so a ``uv tool install trackinizer`` gives you the
 grammar and none of the guidance. This module copies that tree into the
 directories the agents actually read.
 
-Skills are COPIED, never symlinked: the codex loader skips a skill whose
-``SKILL.md`` is a symlink (see ``docs/skills/README.md``), and a copy also
-survives the package being upgraded or removed underneath it.
+Skills are copied so the installed guidance survives the package being
+upgraded or removed underneath it. The grammar manuals travel with the skills.
 
 Layout is the Agent Skills convention -- one directory per skill, each
 holding a ``SKILL.md``. The nesting under ``trax/`` is preserved because the
@@ -23,6 +22,7 @@ from pathlib import Path
 from typing import Final
 
 import shutil
+import tempfile
 
 
 __all__ = [
@@ -61,9 +61,6 @@ class Target:
     project: str
 
 
-# Claude Code reads both ``~/.claude/skills`` and ``.claude/skills``; Cursor
-# reads ``.cursor/skills``. Codex is given ``.sagent/skills`` because that is
-# the path ``docs/skills/README.md`` already names for the sibling sagent CLI.
 TARGETS: Final[dict[str, Target]] = {
     "claude": Target(
         name="claude",
@@ -74,34 +71,108 @@ TARGETS: Final[dict[str, Target]] = {
     "cursor": Target(
         name="cursor",
         label="Cursor",
-        user=None,
+        user=".cursor/skills",
         project=".cursor/skills",
     ),
     "codex": Target(
         name="codex",
         label="Codex",
-        user=None,
-        project=".sagent/skills",
+        user=".agents/skills",
+        project=".agents/skills",
     ),
 }
 
 
 def bundled_skills() -> Path:
-    """Return the packaged skills root (the directory holding ``trax/``).
-
-    Returns:
-      root: Directory containing the ``trax`` skill tree.
+    """Return the packaged skills root, requiring its router and manuals.
 
     Raises:
-      InstallError: The package shipped without its skills.
+      InstallError: The package shipped without required skill resources.
 
     """
-    root = Path(__file__).resolve().parent / "docs" / "skills"
-    if not (root / "trax" / "SKILL.md").is_file():
-        raise InstallError(
-            f"bundled skills missing at {root} -- reinstall trackinizer",
-        )
+    docs = Path(__file__).resolve().parent / "docs"
+    root = docs / "skills"
+    required = (root / "trax/SKILL.md", docs / "grammar.lark", docs / "GRAMMAR.md")
+    for resource in required:
+        if not resource.is_file():
+            raise InstallError(
+                f"bundled skills missing at {resource} -- reinstall trackinizer",
+            )
     return root
+
+
+def install(
+    target: Target,
+    *,
+    project: bool = False,
+    root: Path | None = None,
+    dry_run: bool = False,
+) -> tuple[Path, int]:
+    """Replace an agent's trax skill tree after preparing a complete copy.
+
+    Args:
+      target: Agent directory convention.
+      project: Install into the project rather than the user's home.
+      root: Project root; defaults to the current directory.
+      dry_run: Report the destination and file count without writing.
+
+    Returns:
+      destination: The installed or proposed trax directory.
+      count: Number of files, including the grammar manuals.
+
+    Raises:
+      InstallError: Resources are missing or the destination cannot be written.
+
+    """
+    source = bundled_skills() / "trax"
+    destination = (
+        _destination(target, project=project, root=root or Path.cwd()) / "trax"
+    )
+    count = sum(path.is_file() for path in source.rglob("*")) + 2
+    if dry_run:
+        return destination, count
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        _install_tree(source, destination=destination)
+    except OSError as error:
+        raise InstallError(f"could not write {destination}: {error}") from error
+    return destination, count
+
+
+def uninstall(
+    target: Target,
+    *,
+    project: bool = False,
+    root: Path | None = None,
+    dry_run: bool = False,
+) -> Path | None:
+    """Remove the installed trax entry without following destination symlinks.
+
+    Args:
+      target: Agent directory convention.
+      project: Operate on the project rather than the user's home.
+      root: Project root; defaults to the current directory.
+      dry_run: Report an existing entry without removing it.
+
+    Returns:
+      removed: The removed or proposed path, or None when absent.
+
+    Raises:
+      InstallError: The entry exists but cannot be removed.
+
+    """
+    destination = (
+        _destination(target, project=project, root=root or Path.cwd()) / "trax"
+    )
+    if not _exists(destination):
+        return None
+    if dry_run:
+        return destination
+    try:
+        _remove(destination)
+    except OSError as error:
+        raise InstallError(f"could not remove {destination}: {error}") from error
+    return destination
 
 
 def _destination(target: Target, *, project: bool, root: Path) -> Path:
@@ -115,74 +186,51 @@ def _destination(target: Target, *, project: bool, root: Path) -> Path:
     return Path.home() / target.user  # noqa: TID251 -- vendor fixed path, not ours (AGENTS.md rule 3)  # house-ignore[xdg-literal] -- Agent CLI's fixed skill dir, not ours (AGENTS.md rule 3).
 
 
-def install(
-    target: Target,
-    *,
-    project: bool = False,
-    root: Path | None = None,
-    dry_run: bool = False,
-) -> tuple[Path, int]:
-    """Copy the bundled skill tree into ``target``'s skill directory.
-
-    Idempotent: an existing ``trax`` skill directory is replaced wholesale, so
-    upgrading is the same command as installing and a stale child skill from a
-    previous version cannot survive.
-
-    Args:
-      target: Which agent's convention to write.
-      project: Install into the project rather than the user's home.
-      root: Project root for a project-scoped install; defaults to the cwd.
-      dry_run: Report the destination without writing.
-
-    Returns:
-      destination: The ``trax`` directory that was (or would be) written.
-      count: How many files the tree holds.
-
-    Raises:
-      InstallError: The destination is unusable.
-
-    """
-    source = bundled_skills() / "trax"
-    dest_root = _destination(target, project=project, root=root or Path.cwd())
-    dest = dest_root / "trax"
-    count = sum(1 for p in source.rglob("*") if p.is_file())
-    if dry_run:
-        return dest, count
+def _install_tree(source: Path, *, destination: Path) -> None:
+    staging = Path(tempfile.mkdtemp(prefix=".trax-", dir=destination.parent))
+    replacement = staging / "replacement"
+    previous = staging / "previous"
     try:
-        dest_root.mkdir(parents=True, exist_ok=True)
-        if dest.exists():
-            shutil.rmtree(dest)
-        shutil.copytree(source, dest)
-    except OSError as err:
-        raise InstallError(f"could not write {dest}: {err}") from err
-    return dest, count
+        shutil.copytree(source, replacement)
+        for name in ("grammar.lark", "GRAMMAR.md"):
+            shutil.copy2(source.parent.parent / name, replacement / name)
+        _publish(replacement, destination=destination, previous=previous)
+    finally:
+        # A failed rollback leaves the sole working copy here for recovery.
+        if not _exists(previous):
+            shutil.rmtree(staging)
 
 
-def uninstall(
-    target: Target,
-    *,
-    project: bool = False,
-    root: Path | None = None,
-) -> Path | None:
-    """Remove the installed ``trax`` skill tree.
-
-    Args:
-      target: Which agent's convention to clear.
-      project: Operate on the project rather than the user's home.
-      root: Project root for a project-scoped install; defaults to the cwd.
-
-    Returns:
-      removed: The directory removed, or ``None`` when nothing was installed.
-
-    Raises:
-      InstallError: The directory exists but could not be removed.
-
-    """
-    dest = _destination(target, project=project, root=root or Path.cwd()) / "trax"
-    if not dest.exists():
-        return None
+def _publish(replacement: Path, *, destination: Path, previous: Path) -> None:
+    if _exists(destination):
+        destination.rename(previous)
     try:
-        shutil.rmtree(dest)
-    except OSError as err:
-        raise InstallError(f"could not remove {dest}: {err}") from err
-    return dest
+        replacement.rename(destination)
+    except OSError as error:
+        _restore(previous, destination=destination, failure=error)
+        raise
+    if _exists(previous):
+        _remove(previous)
+
+
+def _restore(previous: Path, *, destination: Path, failure: OSError) -> None:
+    if not _exists(previous):
+        return
+    try:
+        previous.rename(destination)
+    except OSError as error:
+        raise InstallError(
+            f"could not publish {destination}: {failure}; restore failed: {error}; "
+            f"previous installation retained at {previous}",
+        ) from error
+
+
+def _exists(path: Path) -> bool:
+    return path.is_symlink() or path.exists()
+
+
+def _remove(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    else:
+        shutil.rmtree(path)
