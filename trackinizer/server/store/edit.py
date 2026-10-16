@@ -318,7 +318,7 @@ class _EditMixin(_CascadeAuditMixin):
             ()
             if current is None
             else await self._embed_inquiry(
-                StrCodec.coerce(current.get("title"), "") or "",
+                from_plain(current.get("title"), str, strict=False, default="") or "",
                 value,
             )
         )
@@ -329,7 +329,6 @@ class _EditMixin(_CascadeAuditMixin):
             api_key_id=api_key_id,
             actor=actor,
             reason=reason,
-
             reembed=reembed,
         )
 

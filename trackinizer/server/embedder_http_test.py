@@ -16,8 +16,8 @@ import httpx2
 import pytest
 
 from trackinizer.server import embedder_http
-from trackinizer.server.embedder import StubEmbedder
 from trackinizer.server.embedder_http import HttpEmbedder
+from trackinizer.server.embedders.stub import StubEmbedder
 from trackinizer.types.errors import ConflictError
 
 

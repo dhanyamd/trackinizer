@@ -645,7 +645,8 @@ class _ReadMixin(_StoreShared):
             return [
                 (
                     materialize(row, outbound, inbound),
-                    FloatCodec.coerce(row["distance"], 0.0) or 0.0,
+                    from_plain(row["distance"], float, strict=False, default=0.0)
+                    or 0.0,
                 )
                 for row in rows
             ]

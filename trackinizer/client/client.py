@@ -565,7 +565,7 @@ class Client:
         kind: Inquiry.InquiryKind | None = None,
         limit: int | None = None,
         model: str | None = None,
-    ) -> list[dict[str, JSONValue]]:
+    ) -> list[dict[str, PlainTree]]:
         """Inquiries whose embedding is nearest ``text``, nearest first.
 
         Each row is the inquiry's own fields plus a ``distance`` key: pgvector

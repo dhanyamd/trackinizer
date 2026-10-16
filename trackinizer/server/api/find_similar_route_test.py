@@ -14,11 +14,11 @@ from typing import TYPE_CHECKING, cast
 import uuid
 
 from fastapi.testclient import TestClient
+from treekle import from_plain
 
 import pytest
 
 from trackinizer.conftest import FakeEngine, make_store
-from trackinizer.lib.custom_json import DictCodec, ListCodec
 from trackinizer.lib.postgres import DatabaseEngine
 from trackinizer.server.api.app import app
 from trackinizer.server.api.conftest import (
@@ -27,7 +27,7 @@ from trackinizer.server.api.conftest import (
     install_identity,
     make_test_identity,
 )
-from trackinizer.server.embedder import StubEmbedder
+from trackinizer.server.embedders.stub import StubEmbedder
 from trackinizer.server.store.core import Store
 
 
@@ -123,8 +123,8 @@ def test_returns_rows_with_a_distance_key(
     response = client.get("/api/inquiries/similar", params={"q": "momentum"})
 
     assert response.status_code == 200
-    rows = ListCodec.coerce(response.json(), object)
-    first = DictCodec.coerce(rows[0])
+    rows = from_plain(response.json(), list[dict[str, object]])
+    first = rows[0]
     assert first["kind"] == "Belief"
     assert first["distance"] == 0.25
 

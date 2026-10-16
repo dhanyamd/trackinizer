@@ -298,7 +298,7 @@ class FakeClient:
         # One row carrying the ``distance`` key the real route adds alongside
         # the inquiry's own fields. Typed as the method's return type rather
         # than ``object`` so no cast is needed to hand it back.
-        self.similar_payload: list[dict[str, JSONValue]] = [
+        self.similar_payload: list[dict[str, PlainTree]] = [
             {
                 "id": str(self.target_id),
                 "kind": "Belief",
@@ -633,7 +633,7 @@ class FakeClient:
         kind: Inquiry.InquiryKind | None = None,
         limit: int | None = None,
         model: str | None = None,
-    ) -> list[dict[str, JSONValue]]:
+    ) -> list[dict[str, PlainTree]]:
         """Record a similarity query; the fake ranks nothing."""
         self.calls.append(
             (

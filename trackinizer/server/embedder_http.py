@@ -23,7 +23,7 @@ from typing import Final, cast
 
 import httpx2
 
-from trackinizer.server.embedder import StubEmbedder
+from trackinizer.server.embedders.stub import StubEmbedder
 from trackinizer.types.errors import ConflictError
 
 
@@ -107,7 +107,7 @@ class HttpEmbedder:
 
         """
         headers = {"Content-Type": "application/json"}
-        if self._api_key:
+        if self._api_key is not None and self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
         payload: dict[str, object] = {
             "input": text,
