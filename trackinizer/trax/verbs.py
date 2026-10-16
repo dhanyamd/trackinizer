@@ -2829,9 +2829,9 @@ Notes:
     ) -> None:
         del verb, client_factory  # Local file operation; the server is not involved.
         target = TARGETS[cast(str, args.target)]
-        uninstalling = _arg_bool(args, "uninstall")
-        project = _arg_bool(args, "project")
-        dry_run = _arg_bool(args, "dry_run")
+        uninstalling = bool(_arg_values(args).get("uninstall", False))
+        project = bool(_arg_values(args).get("project", False))
+        dry_run = bool(_arg_values(args).get("dry_run", False))
         try:
             if uninstalling:
                 removed = uninstall(target, project=project)

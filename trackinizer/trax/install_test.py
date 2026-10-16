@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from trackinizer.trax.cli import parse_and_run
 from trackinizer.trax.install import (
     TARGETS,
     InstallError,
@@ -101,6 +102,33 @@ def test_every_target_installs_project_scope(tmp_path: Path) -> None:
         dest, count = install(target, project=True, root=tmp_path / target.name)
         assert (dest / "SKILL.md").is_file()
         assert count >= 2
+
+
+def test_cli_installs_and_uninstalls_without_server(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Keep the install verb integrated with the current CLI dispatcher."""
+    monkeypatch.chdir(tmp_path)
+    args = ["install", "--target", "cursor", "--project"]
+    destination = tmp_path / ".cursor" / "skills" / "trax"
+    parse_and_run(
+        [*args, "--dry-run"],
+        client_factory=lambda: pytest.fail("install must not contact the server"),
+    )
+    assert not destination.exists()
+    assert "would install:" in capsys.readouterr().out
+    parse_and_run(
+        args,
+        client_factory=lambda: pytest.fail("install must not contact the server"),
+    )
+    assert (destination / "SKILL.md").is_file()
+    parse_and_run(
+        [*args, "--uninstall"],
+        client_factory=lambda: pytest.fail("install must not contact the server"),
+    )
+    assert not destination.exists()
 
 
 def test_install_error_is_raised_when_bundled_skills_missing(
