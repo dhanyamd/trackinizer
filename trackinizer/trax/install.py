@@ -1,64 +1,64 @@
-"""Install the bundled trax skills into an agent's skill directory.
+"""Manage copied trax skills while preserving source links and local changes.
 
-The skills under ``trax/docs/skills`` teach an agent how to author each
-inquiry kind. They ship in the wheel but land inside the installed package,
-where no agent looks -- so a ``uv tool install trackinizer`` gives you the
-grammar and none of the guidance. This module copies that tree into the
-directories the agents actually read.
-
-Skills are copied so the installed guidance survives the package being
-upgraded or removed underneath it. The grammar manuals travel with the skills.
-
-Layout is the Agent Skills convention -- one directory per skill, each
-holding a ``SKILL.md``. The nesting under ``trax/`` is preserved because the
-per-kind child skills (``trax-belief``, ``trax-paper``, ...) are reachable
-only through it.
+The package bundles a router, per-kind guidance, and both grammar manuals.
+Managed copies carry a receipt so upgrades and removal can distinguish package
+snapshots from user edits. Existing source discovery links remain authoritative.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal, TypedDict
 
+import errno
+import hashlib
+import json
 import shutil
+import stat
 import tempfile
+
+from treekle import json_loads, to_plain
 
 
 __all__ = [
     "TARGETS",
     "InstallError",
+    "SkillCheck",
     "Target",
     "bundled_skills",
+    "check_skills",
     "install",
     "uninstall",
 ]
 
 
 class InstallError(Exception):
-    """A skill tree could not be installed or removed."""
+    """A skill tree could not be inspected, installed, or removed."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Target:
-    """One agent's skill directory convention.
-
-    Attributes:
-      name: The ``--target`` token.
-      label: Human name for receipts.
-      user: Path under ``$HOME`` for a user-wide install, or ``None`` when the
-        agent only reads project-local skills.
-      project: Path relative to the project root for a project-local install.
-
-    """
+    """Describe an agent's user-wide and project-local skill directories."""
 
     name: str
-
     label: str
-
     user: str | None
-
     project: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SkillCheck:
+    """Report the ownership and package freshness of one skill destination."""
+
+    destination: Path
+    status: Literal["missing", "current", "stale", "source", "unmanaged", "modified"]
+    detail: str
+
+    @property
+    def healthy(self) -> bool:
+        """Return whether copied or source guidance is ready to use."""
+        return self.status in {"current", "source"}
 
 
 TARGETS: Final[dict[str, Target]] = {
@@ -87,18 +87,58 @@ def bundled_skills() -> Path:
     """Return the packaged skills root, requiring its router and manuals.
 
     Raises:
-      InstallError: The package shipped without required skill resources.
+      InstallError: Required package resources are missing or unreadable.
 
     """
     docs = Path(__file__).resolve().parent / "docs"
     root = docs / "skills"
-    required = (root / "trax/SKILL.md", docs / "grammar.lark", docs / "GRAMMAR.md")
-    for resource in required:
-        if not resource.is_file():
-            raise InstallError(
-                f"bundled skills missing at {resource} -- reinstall trackinizer",
-            )
+    try:
+        for resource in (
+            root / "trax/SKILL.md",
+            docs / "grammar.lark",
+            docs / "GRAMMAR.md",
+        ):
+            if not stat.S_ISREG(resource.stat().st_mode):
+                raise InstallError(f"bundled skills missing at {resource}")
+    except OSError as error:
+        raise InstallError(f"bundled skills unavailable: {error}") from error
     return root
+
+
+def check_skills(
+    target: Target,
+    *,
+    project: bool = False,
+    root: Path | None = None,
+) -> SkillCheck:
+    """Inspect guidance without changing an agent's skill directories.
+
+    Args:
+      target: Agent directory convention.
+      project: Inspect the project rather than the user's home.
+      root: Project root; defaults to the current directory.
+
+    Returns:
+      check: Destination, ownership status, and a human-readable explanation.
+
+    Raises:
+      InstallError: The destination or required package resources cannot be read.
+
+    """
+    destination, boundary = _location(target, project=project, root=root or Path.cwd())
+    try:
+        check, receipt = _inspect(destination, boundary=boundary)
+        if receipt is not None and check.status == "current":
+            _, expected = _bundle()
+            if expected != (receipt["files"], receipt["directories"]):
+                return SkillCheck(
+                    destination=destination,
+                    status="stale",
+                    detail="Managed skills differ from the installed package; run --fix.",
+                )
+        return check
+    except OSError as error:
+        raise InstallError(f"could not inspect {destination}: {error}") from error
 
 
 def install(
@@ -108,34 +148,58 @@ def install(
     root: Path | None = None,
     dry_run: bool = False,
 ) -> tuple[Path, int]:
-    """Replace an agent's trax skill tree after preparing a complete copy.
+    """Install missing guidance or atomically refresh an unchanged managed copy.
 
     Args:
       target: Agent directory convention.
       project: Install into the project rather than the user's home.
       root: Project root; defaults to the current directory.
-      dry_run: Report the destination and file count without writing.
+      dry_run: Inspect and report the destination without writing.
 
     Returns:
-      destination: The installed or proposed trax directory.
-      count: Number of files, including the grammar manuals.
+      destination: Installed, preserved, or proposed trax directory.
+      count: Number of bundled guidance files, including both grammar manuals.
 
     Raises:
-      InstallError: Resources are missing or the destination cannot be written.
+      InstallError: Resources are unavailable, ownership is unsafe, or a write fails.
 
     """
-    source = bundled_skills() / "trax"
-    destination = (
-        _destination(target, project=project, root=root or Path.cwd()) / "trax"
-    )
-    count = sum(path.is_file() for path in source.rglob("*")) + 2
-    if dry_run:
-        return destination, count
+    destination, boundary = _location(target, project=project, root=root or Path.cwd())
+    created: list[Path] = []
     try:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        _install_tree(source, destination=destination)
-    except OSError as error:
-        raise InstallError(f"could not write {destination}: {error}") from error
+        check, receipt = _inspect(destination, boundary=boundary)
+        _require_owned(check)
+        source, expected = _bundle()
+        count = len(expected[0])
+        if dry_run or check.status == "source":
+            return destination, count
+        if receipt is not None and expected == (
+            receipt["files"],
+            receipt["directories"],
+        ):
+            return destination, count
+        _make_parents(destination.parent, boundary=boundary, created=created)
+        parents = (
+            receipt["created_parents"]
+            if receipt is not None
+            else [str(p) for p in created]
+        )
+        _install_tree(
+            source,
+            destination=destination,
+            expected=expected,
+            parents=parents,
+        )
+    except (OSError, InstallError) as error:
+        try:
+            _cleanup_parents(created)
+        except OSError as cleanup:
+            raise InstallError(
+                f"{error}; parent cleanup failed: {cleanup}",
+            ) from cleanup
+        if isinstance(error, InstallError):
+            raise
+        raise InstallError(f"could not install {destination}: {error}") from error
     return destination, count
 
 
@@ -146,39 +210,46 @@ def uninstall(
     root: Path | None = None,
     dry_run: bool = False,
 ) -> Path | None:
-    """Remove the installed trax entry without following destination symlinks.
+    """Remove unchanged managed guidance and its empty installer-created parents.
 
     Args:
       target: Agent directory convention.
       project: Operate on the project rather than the user's home.
       root: Project root; defaults to the current directory.
-      dry_run: Report an existing entry without removing it.
+      dry_run: Inspect and report an owned copy without removing it.
 
     Returns:
-      removed: The removed or proposed path, or None when absent.
+      removed: Removed or proposed path, or None for absent guidance or a source link.
 
     Raises:
-      InstallError: The entry exists but cannot be removed.
+      InstallError: Ownership is unsafe or inspection, removal, or cleanup fails.
 
     """
-    destination = (
-        _destination(target, project=project, root=root or Path.cwd()) / "trax"
-    )
-    if not _exists(destination):
-        return None
-    if dry_run:
-        return destination
+    destination, boundary = _location(target, project=project, root=root or Path.cwd())
     try:
-        _remove(destination)
+        check, receipt = _inspect(destination, boundary=boundary)
+        _require_owned(check)
+        if check.status in {"missing", "source"}:
+            return None
+        assert receipt is not None
+        if dry_run:
+            return destination
+        shutil.rmtree(destination)
     except OSError as error:
         raise InstallError(f"could not remove {destination}: {error}") from error
+    try:
+        _cleanup_parents([Path(parent) for parent in receipt["created_parents"]])
+    except OSError as error:
+        raise InstallError(
+            f"removed {destination}; could not clean empty parent: {error}",
+        ) from error
     return destination
 
 
 def _destination(target: Target, *, project: bool, root: Path) -> Path:
     """Resolve where ``target``'s skills live for this scope."""
     if project:
-        return root / target.project
+        return (root / target.project).absolute()
     if target.user is None:
         raise InstallError(
             f"{target.label} reads project-local skills only; re-run with --project",
@@ -186,19 +257,231 @@ def _destination(target: Target, *, project: bool, root: Path) -> Path:
     return Path.home() / target.user  # noqa: TID251 -- vendor fixed path, not ours (AGENTS.md rule 3)  # house-ignore[xdg-literal] -- Agent CLI's fixed skill dir, not ours (AGENTS.md rule 3).
 
 
-def _install_tree(source: Path, *, destination: Path) -> None:
+def _location(target: Target, *, project: bool, root: Path) -> tuple[Path, Path]:
+    destination = _destination(target, project=project, root=root) / "trax"
+    convention = target.project if project else target.user
+    assert convention is not None
+    return destination, destination.parents[len(Path(convention).parts)]
+
+
+type _Snapshot = tuple[dict[str, str], list[str]]
+
+
+class _Receipt(TypedDict):
+    owner: Literal["trackinizer.trax.install"]
+    version: Literal[1]
+    destination: str
+    files: dict[str, str]
+    directories: list[str]
+    created_parents: list[str]
+
+
+def _inspect(
+    destination: Path,
+    *,
+    boundary: Path,
+) -> tuple[SkillCheck, _Receipt | None]:
+    try:
+        mode = destination.lstat().st_mode
+    except FileNotFoundError:
+        return SkillCheck(
+            destination=destination,
+            status="missing",
+            detail="Skills are missing; run --fix.",
+        ), None
+    if stat.S_ISLNK(mode):
+        try:
+            source = stat.S_ISDIR(destination.stat().st_mode) and stat.S_ISREG(
+                (destination / "SKILL.md").stat().st_mode,
+            )
+        except (FileNotFoundError, NotADirectoryError):
+            source = False
+        if source:
+            return SkillCheck(
+                destination=destination,
+                status="source",
+                detail="Source skill link preserved.",
+            ), None
+    receipt = (
+        _read_receipt(destination, boundary=boundary) if stat.S_ISDIR(mode) else None
+    )
+    if receipt is None:
+        return SkillCheck(
+            destination=destination,
+            status="unmanaged",
+            detail="Unmanaged destination preserved; move it explicitly before installing.",
+        ), None
+    actual = _snapshot(destination, installed=True)
+    if actual != (receipt["files"], receipt["directories"]):
+        return SkillCheck(
+            destination=destination,
+            status="modified",
+            detail="Managed guidance contains local changes; preserve them before reinstalling.",
+        ), receipt
+    return SkillCheck(
+        destination=destination,
+        status="current",
+        detail="Managed skills match their installation receipt.",
+    ), receipt
+
+
+def _read_receipt(destination: Path, *, boundary: Path) -> _Receipt | None:
+    path = destination / ".trax-install.json"
+    try:
+        if not stat.S_ISREG(path.lstat().st_mode):
+            return None
+        receipt = json_loads(path.read_text(), _Receipt)
+    except (FileNotFoundError, ValueError, TypeError):
+        return None
+    if receipt["destination"] != str(destination):
+        return None
+    if any(
+        not _relative(path) for path in (*receipt["files"], *receipt["directories"])
+    ):
+        return None
+    if any(
+        len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest)
+        for digest in receipt["files"].values()
+    ):
+        return None
+    if ".trax-install.json" in receipt["files"]:
+        return None
+    parents = receipt["created_parents"]
+    allowed = [
+        str(parent)
+        for parent in destination.parents
+        if parent != boundary and parent.is_relative_to(boundary)
+    ]
+    if parents != allowed[: len(parents)]:
+        return None
+    return receipt
+
+
+def _relative(value: str) -> bool:
+    path = Path(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and ".." not in path.parts
+        and path.as_posix() == value
+        and value != "."
+    )
+
+
+def _require_owned(check: SkillCheck) -> None:
+    if check.status in {"unmanaged", "modified"}:
+        raise InstallError(
+            f"{check.status} skills at {check.destination}: {check.detail}",
+        )
+
+
+def _snapshot(root: Path, *, installed: bool = False) -> _Snapshot | None:
+    files: dict[str, str] = {}
+    directories: list[str] = []
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        for path in directory.iterdir():
+            relative = path.relative_to(root).as_posix()
+            mode = path.lstat().st_mode
+            if installed and relative == ".trax-install.json":
+                continue
+            if stat.S_ISDIR(mode):
+                directories.append(relative)
+                pending.append(path)
+            elif stat.S_ISREG(mode):
+                files[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+            else:
+                return None
+    return files, sorted(directories)
+
+
+def _bundle() -> tuple[Path, _Snapshot]:
+    source = bundled_skills() / "trax"
+    expected = _snapshot(source)
+    if expected is None or ".trax-install.json" in expected[0]:
+        raise InstallError(f"bundled skills contain unsupported entries at {source}")
+    for name in ("grammar.lark", "GRAMMAR.md"):
+        expected[0][name] = hashlib.sha256(
+            (source.parent.parent / name).read_bytes(),
+        ).hexdigest()
+    return source, expected
+
+
+def _make_parents(parent: Path, *, boundary: Path, created: list[Path]) -> None:
+    pending: list[Path] = []
+    while parent != boundary and not _exists(parent):
+        pending.append(parent)
+        parent = parent.parent
+    for path in reversed(pending):
+        path.mkdir()
+        created.insert(0, path)
+
+
+def _cleanup_parents(parents: list[Path]) -> None:
+    for parent in parents:
+        if parent.is_symlink():
+            continue
+        try:
+            parent.rmdir()
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            if error.errno in {errno.ENOTEMPTY, errno.EEXIST}:
+                continue
+            raise
+
+
+def _install_tree(
+    source: Path,
+    *,
+    destination: Path,
+    expected: _Snapshot,
+    parents: list[str],
+) -> None:
     staging = Path(tempfile.mkdtemp(prefix=".trax-", dir=destination.parent))
     replacement = staging / "replacement"
     previous = staging / "previous"
+    published = False
     try:
         shutil.copytree(source, replacement)
         for name in ("grammar.lark", "GRAMMAR.md"):
             shutil.copy2(source.parent.parent / name, replacement / name)
+        _verify_copy(replacement, expected=expected)
+        receipt = _Receipt(
+            owner="trackinizer.trax.install",
+            version=1,
+            destination=str(destination),
+            files=expected[0],
+            directories=expected[1],
+            created_parents=parents,
+        )
+        (replacement / ".trax-install.json").write_text(
+            json.dumps(to_plain(receipt)) + "\n",
+        )
         _publish(replacement, destination=destination, previous=previous)
-    finally:
-        # A failed rollback leaves the sole working copy here for recovery.
+        published = True
+        shutil.rmtree(staging)
+    except (OSError, InstallError) as error:
+        if published:
+            raise InstallError(
+                f"installed {destination}; cleanup failed: {error}; retained cleanup at {staging}",
+            ) from error
         if not _exists(previous):
-            shutil.rmtree(staging)
+            try:
+                shutil.rmtree(staging)
+            except OSError as cleanup:
+                raise InstallError(
+                    f"{error}; cleanup failed: {cleanup}; retained cleanup at {staging}",
+                ) from cleanup
+        raise
+
+
+def _verify_copy(replacement: Path, *, expected: _Snapshot) -> None:
+    if _snapshot(replacement) != expected:
+        raise InstallError(
+            "bundled skills changed while copying; previous guidance preserved",
+        )
 
 
 def _publish(replacement: Path, *, destination: Path, previous: Path) -> None:
@@ -209,8 +492,6 @@ def _publish(replacement: Path, *, destination: Path, previous: Path) -> None:
     except OSError as error:
         _restore(previous, destination=destination, failure=error)
         raise
-    if _exists(previous):
-        _remove(previous)
 
 
 def _restore(previous: Path, *, destination: Path, failure: OSError) -> None:
@@ -226,11 +507,8 @@ def _restore(previous: Path, *, destination: Path, failure: OSError) -> None:
 
 
 def _exists(path: Path) -> bool:
-    return path.is_symlink() or path.exists()
-
-
-def _remove(path: Path) -> None:
-    if path.is_symlink() or path.is_file():
-        path.unlink()
-    else:
-        shutil.rmtree(path)
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return False
+    return True
