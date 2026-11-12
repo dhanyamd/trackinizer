@@ -4,6 +4,7 @@ import { getArtifactContentRevision } from "../api/artifacts";
 import { formatRoute, UUID } from "../router/route";
 import { useVisualMark } from "./marks";
 import type { RendererProps } from "./registry";
+import { HtmlArtifact } from "./HtmlArtifact";
 import "./Artifact.css";
 
 /** A graph row cited by an Artifact finding. */
@@ -183,19 +184,3 @@ function citationKey(citation: ArtifactCitation, index: number): string {
   return `${citation.record_id}:${citation.claim_id ?? ""}:${index}`;
 }
 
-// The page route sends the sandbox CSP itself. A real URL (not srcdoc) also lets
-// the page's own history.pushState/replaceState work.
-function HtmlArtifact({ id, title }: { readonly id: string; readonly title: string }) {
-  return <iframe
-    className="artifact-html-frame"
-    title={`${title} Artifact content`}
-    sandbox="allow-scripts allow-popups"
-    referrerPolicy="no-referrer"
-    src={htmlPageUrl(id)}
-  />;
-}
-
-/** The sandboxed page route serving one HTML Artifact revision. */
-function htmlPageUrl(id: string): string {
-  return `/api/artifacts/${encodeURIComponent(id)}/html`;
-}

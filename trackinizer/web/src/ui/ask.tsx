@@ -1,0 +1,137 @@
+// POINT AT IT AND ASK.
+//
+// The canvas is read-only on purpose: a surface you can edit is a surface that drifts
+// from the record it was composed against, and a notebook you can mutate cell-by-cell
+// stops being one whole thing. So the reader gets exactly one verb instead — point at
+// any part of an answer and ask about THAT part.
+//
+// This is the other half of the canvas. The canvas let the agent show more than text;
+// this lets the reader show more than a screenshot: the question arrives with the
+// actual node that was pointed at, its own composed JSON, not a crop of pixels the
+// agent has to squint at.
+//
+// One verb, not a toolbar. No edit, no move, no delete, no comment threads — those are
+// four decisions a reader has to make before they can ask a question, and the question
+// is the point.
+import { useCallback, useEffect, useRef, useState } from "react";
+import "./ask.css";
+
+/** What the reader pointed at: the node, and the composed item behind it. */
+export type Pointed = {
+  /** The node's family — `scene`, `ranked`, `figure`. Tells the agent what it is. */
+  readonly node: string;
+  /** The item exactly as it was composed. The agent gets the data it emitted, not a
+   *  description of it, so "why is this arm unpriced" can be answered from the arm. */
+  readonly item: unknown;
+  /** Where on screen, so the asker's own view can be reconstructed if it matters. */
+  readonly at: { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
+};
+
+export type Asked = { readonly about: Pointed; readonly question: string };
+
+/**
+ * Wrap a composed surface to make every item pointable.
+ *
+ * Works by delegation off one listener rather than a handler per node: a composition
+ * can hold hundreds of items, and a surface that attaches hundreds of listeners to
+ * enable one verb has spent more than the verb is worth.
+ */
+export function Askable({ children, onAsk }: {
+  readonly children: React.ReactNode;
+  readonly onAsk: (asked: Asked) => void;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const [pointed, setPointed] = useState<Pointed | null>(null);
+  const [question, setQuestion] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+
+  const click = useCallback((event: React.MouseEvent) => {
+    const target = (event.target as HTMLElement).closest<HTMLElement>("[data-node]");
+    if (!target || !host.current) { setPointed(null); return; }
+    // A control inside a node keeps its own click: pointing at a surface must never
+    // steal the surface's own affordance, or the one verb breaks the others.
+    if ((event.target as HTMLElement).closest("button, a, input")) return;
+    const box = target.getBoundingClientRect();
+    const frame = host.current.getBoundingClientRect();
+    let item: unknown = null;
+    try { item = JSON.parse(target.dataset.item ?? "null"); } catch { item = null; }
+    setPointed({
+      node: target.dataset.node ?? "item",
+      item,
+      at: { x: box.left - frame.left, y: box.top - frame.top, w: box.width, h: box.height },
+    });
+    setQuestion("");
+  }, []);
+
+  useEffect(() => {
+    if (!pointed) return;
+    const focusNow = () => field.current?.focus();
+    requestAnimationFrame(focusNow);
+    const retry = setTimeout(focusNow, 60);
+    return () => clearTimeout(retry);
+  }, [pointed]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { setPointed(null); setExchange(null); } };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
+
+  const [exchange, setExchange] = useState<{ q: string; a: string | null; id: number } | null>(null);
+  // the question lands in the session store; the answering side writes the reply
+  // back under the same id, and the bar renders it the moment it appears.
+  const send = () => {
+    if (!pointed || question.trim() === "") return;
+    const q = question.trim();
+    const id = Date.now();
+    onAsk({ about: pointed, question: q });
+    try {
+      localStorage.setItem(`blocks:ask:${id}:q`, JSON.stringify({ q, node: pointed.node, item: pointed.item }));
+    } catch { /* a blocked store loses this one exchange, not the bar */ }
+    setExchange({ q, a: null, id });
+    setQuestion("");
+  };
+  useEffect(() => {
+    if (!exchange || exchange.a !== null) return;
+    const poll = setInterval(() => {
+      const a = localStorage.getItem(`blocks:ask:${exchange.id}:a`);
+      if (a === null) return;
+      let text = a;
+      try { const o = JSON.parse(a); if (o && typeof o === "object" && o.answer) text = String(o.answer); } catch { /* plain string */ }
+      setExchange({ ...exchange, a: text });
+      clearInterval(poll);
+    }, 600);
+    return () => clearInterval(poll);
+  }, [exchange]);
+
+  return (
+    <div className="ui-askable" ref={host} onClick={click}>
+      {children}
+      {pointed ? (
+        <>
+          {/* The ring is the whole selection UI: it says what was pointed at and
+              nothing else. No handles — there is nothing to resize. */}
+          <div className="ui-ask-ring" style={{
+            left: `${pointed.at.x}px`, top: `${pointed.at.y}px`,
+            width: `${pointed.at.w}px`, height: `${pointed.at.h}px`,
+          }} />
+          <form className="ui-ask" style={{
+            left: `${pointed.at.x}px`, top: `${pointed.at.y + pointed.at.h + 8}px`,
+          }} onSubmit={(e) => { e.preventDefault(); send(); }}>
+            <input ref={field} value={question} placeholder="ask this"
+              onChange={(e) => setQuestion(e.target.value)} aria-label={`ask about this ${pointed.node}`} />
+            <button type="submit" disabled={question.trim() === ""}>ask</button>
+          </form>
+          {exchange && exchange.a !== null && (
+            <div className="ui-ask-answer">
+              <div className="ui-ask-q machine">{exchange.q}</div>
+              <div className="ui-ask-a">{exchange.a}</div>
+            </div>
+          )}
+          {exchange && exchange.a === null && (
+            <div className="ui-ask-thinking machine">thinking…</div>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}

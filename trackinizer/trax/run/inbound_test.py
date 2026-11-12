@@ -131,6 +131,11 @@ class TestRenderInboundKinds:
         assert "trax workspace navigate '#/lookup/RECORD_UUID'" in CANVAS_COMMANDS
         assert "page.record.id" in CANVAS_COMMANDS
         assert "$TRAX_WORKSPACE" in CANVAS_COMMANDS
+        # A seat never told the fold exists asks for the graph instead: measured. The
+        # fold is what a record answers with, and the field is what a reader asks for,
+        # so the brief has to name them in that order.
+        assert "show trax.knowledge --record RECORD_UUID" in CANVAS_COMMANDS
+        assert CANVAS_COMMANDS.index("trax.knowledge") < CANVAS_COMMANDS.index("trax.subgraph")
         assert "\n" not in CANVAS_COMMANDS
         assert '"' not in CANVAS_COMMANDS
         assert "\\" not in CANVAS_COMMANDS

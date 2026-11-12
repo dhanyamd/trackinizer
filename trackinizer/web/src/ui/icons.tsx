@@ -76,6 +76,7 @@ const PATHS = {
   server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>',
   // The canvas bar's Clear all boxes (src/visuals/CanvasBar.tsx): Lucide's eraser.
   eraser: '<path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
 } as const;
 
 /** The name of one of the mock's icons. */
@@ -109,7 +110,7 @@ export function Icon({
   );
 }
 
-/** Trackinizer's logo: a bulb whose filament is a small graph. */
+/** Trackinizer's logo: the crisp architectural geometric monogram mark. */
 export function Logo() {
   return (
     <svg
@@ -117,19 +118,12 @@ export function Logo() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      strokeWidth="2.2"
+      strokeLinejoin="miter"
+      strokeLinecap="square"
       aria-hidden="true"
     >
-      <path d="M9 18.6C9 16.8 4.2 14.04 4.2 9A7.8 7.8 0 0 1 19.8 9C19.8 14.04 15 16.8 15 18.6M9 22.8H15" />
-      <g className="ws-filament">
-        <path d="M9 7.5L12 13.5M15.3 9.3L12 13.5V18.6" />
-        <g fill="currentColor" stroke="none">
-          <circle cx="9" cy="7.5" r="2.6" />
-          <circle cx="15.3" cy="9.3" r="2.6" />
-        </g>
-      </g>
+      <path d="M3 4.5h18v6h-11v9H6v-15z" />
     </svg>
   );
 }

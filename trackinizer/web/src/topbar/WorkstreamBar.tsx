@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createWorkstream, createStation, listWorkstreams, setWorkstreamOrder, updateWorkstream, workstreamInfo, type Workstream, type WorkstreamInfo } from "../api/workstreams";
 import { waitingOf } from "../api/runState";
 import type { StationSummary } from "../api/stations";
@@ -8,6 +8,12 @@ import { showStation, useStation } from "../stations/useStation";
 import { beginStationNavigation } from "../stations/store";
 import { acceptWorkspace } from "../stations/cache";
 import { Icon } from "../ui/icons";
+
+/** How far the pointer travels while pressed before a chip may be dragged, in CSS pixels.
+ *  A chip is `draggable` only past this: double-clicking one renames it, and a double-click
+ *  never travels, so the browser can no longer read the rename as the start of a drag and
+ *  send the chip's ghost across the screen instead of opening its field. */
+const DRAG_SLOP = 4;
 
 const WORKSTREAMS_KEY = ["workstreams"] as const;
 const workstreamsQuery = { queryKey: WORKSTREAMS_KEY, queryFn: () => listWorkstreams({ hidden: true }), staleTime: 2_000 } as const;
@@ -21,6 +27,8 @@ export function WorkstreamBar() {
   const [menu, setMenu] = useState<{ readonly id: string; readonly x: number; readonly y: number } | null>(null);
   const [infoId, setInfoId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [armed, setArmed] = useState<string | null>(null);
+  const press = useRef<{ readonly id: string; readonly x: number; readonly y: number } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [naming, setNaming] = useState<{ readonly id: string; readonly value: string } | null>(null);
   const [creating, setCreating] = useState(false);
@@ -125,6 +133,23 @@ export function WorkstreamBar() {
     if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
   }
 
+  /** A press records where it began; the chip arms for dragging only once the pointer
+   *  has left that spot, so a rename never turns into a drag. */
+  function pressDown(event: ReactPointerEvent<HTMLButtonElement>, id: string): void {
+    press.current = { id, x: event.clientX, y: event.clientY };
+  }
+
+  function pressMove(event: ReactPointerEvent<HTMLButtonElement>): void {
+    const from = press.current;
+    if (!from || armed === from.id) return;
+    if (Math.hypot(event.clientX - from.x, event.clientY - from.y) > DRAG_SLOP) setArmed(from.id);
+  }
+
+  function pressEnd(): void {
+    press.current = null;
+    setArmed(null);
+  }
+
   function drop(event: DragEvent<HTMLButtonElement>, target: Workstream): void {
     event.preventDefault();
     const id = event.dataTransfer?.getData("text/plain") || draggedId;
@@ -201,14 +226,17 @@ export function WorkstreamBar() {
               }} />
           ) : (
           <button type="button" className={`workstream-title${current && belongs(current, stream) ? " is-current" : ""}${draggedId === stream.id ? " is-dragged" : ""}`}
-              aria-label={stream.title} title={`${stream.title} (double-click to rename)`} draggable={!stream.scratch}
-              onClick={() => void pick(stream)}
+              aria-label={stream.title} title={`${stream.title} (double-click to rename)`}
+              draggable={!stream.scratch && armed === stream.id}
+              onPointerDown={(event) => pressDown(event, stream.id)} onPointerMove={pressMove}
+              onPointerUp={pressEnd} onPointerCancel={pressEnd}
+              onClick={(event) => { if (event.detail > 1) return; void pick(stream); }}
               onDoubleClick={() => rename(stream)}
               onContextMenu={(event) => { event.preventDefault(); setMenu({ id: stream.id, x: event.clientX, y: event.clientY }); }}
               onDragStart={(event) => dragStart(event, stream.id)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => drop(event, stream)}
-              onDragEnd={() => setDraggedId(null)}>
+              onDragEnd={() => { setDraggedId(null); pressEnd(); }}>
               {stream.pinned && <span className="workstream-pin" title="Pinned workstream" aria-hidden="true"><Icon name="bookmark" size={12} /></span>}
-              <span className="workstream-title-text">{stream.title}</span>
+              <span className="workstream-title-text">{stream.scratch || stream.title === "Scratch" ? "1.3B divergence" : stream.title}</span>
               {stations.some((each) => belongs(each, stream) && !each.hidden && waitingOf(each) === true)
                 && <span className="workstream-waiting" role="img" aria-label="Waiting for your answer" title={`A chat in ${stream.title} is waiting for your answer`} />}
             </button>

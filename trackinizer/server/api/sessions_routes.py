@@ -461,7 +461,8 @@ async def session_inbound_drain_route(
     A science chat's queue has one drainer, the provider its starter's station names,
     and one live run. For ``claude`` or ``codex`` a drain by the configured assistant's
     key is 409 ``provider_is_cli``, and the run that drains it may be under any key a
-    chat takes a run from (its opening key or its starter's; 403 otherwise). For
+    chat takes a run from (its opening key or its starter's; 403 otherwise), or under
+    no key at all where the server runs ``--no-auth``. For
     ``assistant`` a drain by its opening key that is not the assistant's is 409
     ``provider_is_assistant``. Either holds from the moment the station switches.
 

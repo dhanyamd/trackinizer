@@ -1,4 +1,3 @@
-import type { Provider } from "../api/providers";
 import type { SessionRecord } from "../api/sessions";
 
 /** What the key of a line not yet a record starts with, before the key of its send. */
@@ -108,8 +107,8 @@ export type Goal = {
 };
 
 /**
- * A tool call and the result answering it: the card Chat shows when the user asks to
- * see tool calls. The result is null while the call runs.
+ * A tool call and the result answering it: the row Chat shows between its lines when the
+ * user asks to see tool calls. The result is null while the call runs.
  */
 export type ToolExchange = { readonly call: SessionRecord; readonly result: SessionRecord | null };
 
@@ -137,11 +136,6 @@ export type Line = {
   readonly delivery?: { readonly refused: boolean; readonly reason: string };
   /** The prompt an interaction line shows, which Chat answers; absent on every other line. */
   readonly prompt?: Prompt;
-  /**
-   * The agent that wrote an answer, by its part's format: a chat that switched provider keeps
-   * each answer's own. Absent on every other line, and on an answer from a part of no known format.
-   */
-  readonly agent?: Provider;
   /** The call a tool line shows; absent on every other line. */
   readonly tool?: ToolExchange;
   /** An interaction line that sits under the card of the tool call it asks about. */
@@ -179,8 +173,8 @@ export type Transcript = {
  * The lines of a science chat, read from its session's records in the order they happened:
  * a person's line is an `AgentToAgentMessage` from its poster, or a `UserMessage` (a line sent
  * mid-turn is a `queued_command` `ContextState` instead) a CLI run
- * recorded for a person (see `personOf`); an answer is an `AssistantMessage` with words, named
- * by the agent its part's format says wrote it. A prompt a run asked is a line, which its
+ * recorded for a person (see `personOf`); an answer is an `AssistantMessage` with words. A prompt a run
+ * asked is a line, which its
  * resolution record closes. A slash command a run typed is a `command` line, and the goal its
  * CLI logs is a `goal` line (see `goalStep`). A `ContextCompaction` is a `compaction` line,
  * one for the records that name one act. An interrupted turn, as the CLI logs it (see
@@ -198,7 +192,7 @@ export function readTranscript(parts: readonly ChatPart[], { tools = false }: { 
   // The tool lines still waiting for their result, by call id, and each one's place
   // in `lines`.
   const asked = new Map<string, number>();
-  for (const { part, format, record } of inTimeOrder(parts)) {
+  for (const { part, record } of inTimeOrder(parts)) {
     const key = `${part}:${record.idx}`;
     const payload = record.payload ?? {};
     const at = { part, idx: record.idx };
@@ -252,8 +246,7 @@ export function readTranscript(parts: readonly ChatPart[], { tools = false }: { 
       working = null;
     } else if (record.kind === "AssistantMessage" && text(payload.content)) {
       if (pointing) pointed.add(key);
-      const agent = AGENTS.get(format);
-      lines.push({ key, at, role: "assistant", author: null, text: text(payload.content), sentAt, pending: false, ...(agent && { agent }) });
+      lines.push({ key, at, role: "assistant", author: null, text: text(payload.content), sentAt, pending: false });
       working = null;
     } else if (record.kind === "ContextCompaction") {
       // Claude's in-place compaction and codex's marker beside its `compacted` line each name the act once more.
@@ -511,9 +504,6 @@ function printedOf(payload: Readonly<Record<string, unknown>>, previous: Line | 
   return printed?.[1] ? printed[1] : null;
 }
 
-/** The agent a part's format says wrote it: the assistant's own log, or a CLI's. */
-const AGENTS: ReadonlyMap<string, Provider> = new Map([["sagent", "assistant"], ["claude", "claude"], ["codex", "codex"]]);
-
 const PROMPT_TYPES = ["permission", "question", "plan", "trust"] as const;
 const DECISIONS = ["allow", "deny", "answered", "released"] as const;
 const DECIDERS = ["chat", "terminal", "run", "timeout", "released"] as const;
@@ -636,7 +626,7 @@ function momentsOf(records: readonly SessionRecord[]): number[] {
 }
 
 /** A record's stamp in milliseconds, or null when it has none or it will not parse. A stamp with no zone is UTC, as the loader reads it. */
-function momentOf(record: SessionRecord): number | null {
+export function momentOf(record: SessionRecord): number | null {
   const stamp = record.timestamp;
   if (!stamp) return null;
   const zoned = /(Z|[+-]\d{2}:?\d{2})$/i.test(stamp) ? stamp : `${stamp}Z`;

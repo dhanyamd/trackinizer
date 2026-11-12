@@ -65,11 +65,12 @@ class _EdgeStore:
     ],
     ids=["own-run", "own-run-without-id", "science-chat", "service-account"],
 )
-def test_a_persons_run_is_placed_and_a_chat_or_service_account_is_not(
+def test_the_run_rules_place_a_persons_run_and_neither_a_chat_nor_a_service_account(
     account: str,
     cli_session_id: str | None,
     placed: bool,
 ) -> None:
+    """A chat is settled onto its station by another rule; see ``_chat_placement``."""
     session = AgentSession(
         title="run",
         account=account,

@@ -35,7 +35,7 @@ const commit = execFileSync("git", ["rev-parse", "HEAD"], {
 export default defineConfig({
   base: "/app/",
   plugins: [react(), versionJson(), appIdentity(), preloadFirstLoad()],
-  define: { __COMMIT__: JSON.stringify(commit), __APP__: JSON.stringify(app) },
+  define: { __COMMIT__: JSON.stringify(commit), __APP__: JSON.stringify(app), global: "globalThis" },
   build: {
     // dist/.vite/manifest.json, from which scripts/bundle-size.ts reads what a
     // first visit loads: the entry imports React DOM and the app dynamically

@@ -6,12 +6,18 @@ import { App } from "../app/App";
 import { FakeEventSource } from "../live/testing";
 import { AdminView } from "../router/views";
 
-/** Serve boot for a user of `role`; every other read answers empty. */
+/**
+ * Serve boot for a user of `role`; every other read answers empty.
+ *
+ * The canvas is off here. `getProfile` reads an absent `visual_workspace_enabled` as on, so a
+ * profile that leaves it out mounts Chat's column and the canvas around every page — which is
+ * not what these tests are of, and which buries Admin inside a surface they never serve.
+ */
 function boot(role: string) {
   return stubFetch((request) => {
     const path = new URL(request.url).pathname;
     if (path === "/api/meta/enums") return Response.json({ inquiry_kind_all: ["Issue"], status: ["active"] });
-    if (path === "/api/me/profile") return Response.json({ user_id: "u1", email: "ada@example.com", name: "Ada", role, last_login: null });
+    if (path === "/api/me/profile") return Response.json({ user_id: "u1", email: "ada@example.com", name: "Ada", role, last_login: null, visual_workspace_enabled: false });
     if (path === "/api/admin/users") return Response.json({ users: [] });
     if (path === "/api/admin/allowlist") return Response.json({ entries: [] });
     if (path === "/api/me/tokens") return Response.json({ tokens: [] });
@@ -79,7 +85,7 @@ test("an admin demoted since boot opens Admin: it waits for the profile it refet
     const path = new URL(request.url).pathname;
     if (path === "/api/me/profile") {
       if (role !== "admin") await held;
-      return Response.json({ user_id: "u1", email: "ada@example.com", name: "Ada", role, last_login: null });
+      return Response.json({ user_id: "u1", email: "ada@example.com", name: "Ada", role, last_login: null, visual_workspace_enabled: false });
     }
     if (path === "/api/meta/enums") return Response.json({ inquiry_kind_all: ["Issue"], status: ["active"] });
     return Response.json(path === "/api/inquiries" ? [] : { users: [], entries: [] });

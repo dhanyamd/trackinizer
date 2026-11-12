@@ -41,6 +41,8 @@ def test_visual_catalog_has_default_browse_chat_and_context_graph(
         "trax.summary",
         "trax.files",
         "trax.terminal",
+        "trax.knowledge",
+        "trax.blocks",
     }
     assert by_type["trax.browse"]["version"] == 1
     assert by_type["trax.artifact"]["requires"] == ["record"]

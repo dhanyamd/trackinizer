@@ -3,7 +3,9 @@
 A session is read, written and drained by the key that opened it and by a caller the
 transcript test lets read it; the assistant may also send input to a session for a
 user who may write there, read a session for a user into their chat, and read a chat
-by its audience.
+by its audience. Where the server keeps no keys at all (``--no-auth``) a run arrives
+with none, so it is asked of its account; with auth on, a keyless caller is refused
+before any account is read.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ from trackinizer.server.api.session_access import (
     SessionAccess,
     granted_audience,
     require_attributable,
+    require_chat_writer,
     require_row_account,
     require_row_purge,
     require_session_access,
@@ -55,6 +58,7 @@ from trackinizer.server.config import Assistant, ChatOrgs, Config
 from trackinizer.server.inbound import InboundQueue
 from trackinizer.types.inquiries import AgentSession
 from trackinizer.wire.audience import AUDIENCES
+from trackinizer.wire.wire_science_chat import chat_session_id
 
 
 if TYPE_CHECKING:
@@ -331,6 +335,66 @@ async def test_a_session_that_is_not_a_chat_stays_shared(
     )
 
     assert (appended.status_code, labelled.status_code) == (200, 200)
+
+
+_NO_AUTH_EMAIL: Final = "no-auth@localhost"
+"""The account every caller holds under ``--no-auth``."""
+
+
+async def _keyless_run_part(
+    *,
+    auth_off: bool,
+    account: str | None,
+) -> HTTPException | None:
+    """Ask whether a run with no key may add a part to a chat of the ``account``.
+
+    The chat's session always names an opening key, the one this server has; the run
+    arrives with none, since ``auth.user_of`` resolves it before reading a bearer.
+    """
+    conn = make_conn()
+    conn.fetchval.return_value = account
+    store, _engine = make_store(conn)
+    state = SimpleNamespace(store=store, config=replace(Config(), auth_disabled=auth_off))
+    request = cast("Request", SimpleNamespace(app=SimpleNamespace(state=state)))
+    refusal: HTTPException | None = None
+    try:
+        await require_chat_writer(
+            request,
+            _caller("open", email=_NO_AUTH_EMAIL),
+            session=AgentSession(
+                audience="open",
+                cli_session_id=chat_session_id(uuid.uuid4()),
+                opened_by_api_key_id=uuid.uuid4(),
+            ),
+        )
+    except HTTPException as error:
+        refusal = error
+    # Auth on, a keyless caller is refused without asking; off, it is asked of the
+    # account, so the database answers exactly once.
+    assert conn.fetchval.await_count == (1 if auth_off else 0)
+    return refusal
+
+
+@pytest.mark.asyncio
+async def test_a_keyless_run_adds_a_part_where_the_server_keeps_no_keys() -> None:
+    """With auth on nobody holds a key, so the checks stay the server's own."""
+    refused = await _keyless_run_part(auth_off=False, account=_NO_AUTH_EMAIL)
+    allowed = await _keyless_run_part(auth_off=True, account=_NO_AUTH_EMAIL)
+
+    assert allowed is None
+    assert refused is not None
+    assert refused.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_without_auth_an_account_that_did_not_start_the_chat_is_still_refused() -> (
+    None
+):
+    """The account stands in for a key; it hands nothing out."""
+    refused = await _keyless_run_part(auth_off=True, account="someone-else@example.com")
+
+    assert refused is not None
+    assert refused.status_code == 403
 
 
 def _into(name: str, content: str) -> dict[str, object]:

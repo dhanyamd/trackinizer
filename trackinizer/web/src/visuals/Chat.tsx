@@ -11,11 +11,9 @@ import { runStateOf, takenOver, waitingOf } from "../api/runState";
 import { MetaContext, useProfile, useWriteMode } from "../app/boot";
 import { Composer } from "../composer/Composer";
 import { detailQueries } from "../detail/queries";
-import { useLiveDetail } from "../live";
 import { Markdown } from "../markdown/Markdown";
 import { usePreferences } from "../preferences";
-import { parseHash } from "../router/route";
-import { useHash, validHash, visited } from "../router/trail";
+import { validHash, visited } from "../router/trail";
 import { stationForChat, type StationSummary } from "../api/stations";
 import { clearChat as clearStationChat, hideStation, STATIONS_KEY } from "../stations/actions";
 import { showStation } from "../stations/useStation";
@@ -24,11 +22,13 @@ import { acceptWorkspace } from "../stations/cache";
 import { type ChatPart, type Goal, goalOf, type Line, type LineAt, linesThrough, openPrompts, PENDING, readTranscript, sentBefore, withPending } from "./chatLines";
 import { chatRecordsKey, IDLE_CLOSE_MS, OPENING, readChatParts, useLiveChat } from "./chatRecords";
 import { CloseChat } from "./ChatSharing";
+import { ChatHints } from "./ChatHints";
 import { type PendingPost, useChatFeed } from "./chatFeed";
 import { FOLLOW_UP_ASK, followUpSuggested } from "./chatFollowUp";
 import { useAnswerHighlights } from "./chatHighlights";
 import { useChatPartial } from "./chatPartial";
 import { useChatDraft } from "./chatDraft";
+import { setChatHidden } from "./chatColumnState";
 import { ChatToolCard } from "./ChatToolCard";
 import { ChatWorkstreamHeader } from "./ChatWorkstreamHeader";
 import { RecordField } from "./RecordField";
@@ -103,6 +103,21 @@ export function Chat({ workspace, onWaiting }: {
   const workspaceId = workspace?.id ?? null;
   const draft = useChatDraft(workspaceId);
   const partner = workspace?.partner ?? null;
+  // A visual's "ask about this" lands here: the question goes in the box, Chat
+  // shows itself, and the send is the user's — nothing posts behind their back.
+  useEffect(() => {
+    const ask = (event: Event) => {
+      const question = (event as CustomEvent<string>).detail;
+      if (typeof question !== "string" || !question) return;
+      setChatHidden(false);
+      draft.edit(question);
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(".chat-panel .composer textarea")?.focus();
+      });
+    };
+    window.addEventListener("trackinizer:chat-ask", ask);
+    return () => window.removeEventListener("trackinizer:chat-ask", ask);
+  }, [draft]);
   // The station's chat: bound by its first line, and the same however Chat is mounted again.
   const conversationId = workspace?.conversation_id ?? null;
   const pending = state.pending.filter((post) => post.sender === me && post.workspaceId === workspaceId);
@@ -232,8 +247,6 @@ export function Chat({ workspace, onWaiting }: {
   const reading = conversationId !== null && head.isPending;
   // Only an open chat forks: a copy would not keep a hidden or staff-only chat's readers.
   const forkable = live && head.data?.audience === "open";
-  const hash = useHash();
-  const screen = parseHash(hash, kinds);
 
   // Another station is another conversation: what belonged to this one's pass with it. A
   // fork's own station keeps the wait for its session, which its first line began.
@@ -488,8 +501,6 @@ export function Chat({ workspace, onWaiting }: {
     <ChatWorkstreamHeader workspace={workspace} head={head.data ?? undefined} waiting={needsYou}
       onHide={hideCurrentStation} onClear={clearCurrentChat}
       onDeleted={(conversation) => chatDeleted(conversation)} />
-    {screen.name === "lookup" && <ChatScreenContext id={screen.id} label={screen.id} />}
-    {screen.name === "ref" && <ChatScreenRef kind={screen.kind} seq={screen.seq} />}
     <div className="chat-lines" ref={stage} role="log" aria-label="Messages" aria-live="polite"
       onScroll={(event) => {
         const element = event.currentTarget;
@@ -539,7 +550,8 @@ export function Chat({ workspace, onWaiting }: {
         <CloseChat head={head.data} bar onClose={() => hideStation(queryClient, workspace.id)} />
       </div>}
     {role === "viewer" ? <p className="chat-note chat-read-only" role="note">Viewers can read this chat but not post.</p>
-      : <Composer send={send} target={target} draft={draft}
+      : <div className="chat-foot">
+        <Composer send={send} target={target} draft={draft}
       field={(props, edit) => <RecordField field={stoppable ? { ...props, onKeyDown: (event) => {
         // Esc stops the turn, as in the CLI's own terminal; the box's draft stays.
         if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return props.onKeyDown(event);
@@ -553,7 +565,9 @@ export function Chat({ workspace, onWaiting }: {
       placeholder={reading ? "Loading the conversation…" : outsider ? closedTo(head.data!.audience)
         : taken ? TAKEN_OVER : live ? `Ask ${partner?.actor ?? "your partner"}…` : readOnly(partner?.status, writing)}
       check={checkText} retryable={resendable}
-      failure={failureText} />}
+      failure={failureText} />
+        <ChatHints workspace={workspace} />
+      </div>}
   </section>;
 }
 
@@ -627,8 +641,7 @@ export function offCopy(provider: Provider): string {
 /**
  * One line, by value: the transcript builds its lines afresh on every render,
  * so the panel's renders (a status, the canvas around it) leave each line's
- * Markdown alone unless its text changed. A line by someone else says who, and an answer
- * names the agent that wrote it: a CLI by its name, the server's assistant by `assistant`.
+ * Markdown alone unless its text changed. A line by someone else says who.
  */
 const ChatLine = memo(function ChatLine({ line, me, kinds, assistant, onFork, onFollowUp, onAnswer }: {
   readonly line: Line;
@@ -667,7 +680,6 @@ const ChatLine = memo(function ChatLine({ line, me, kinds, assistant, onFork, on
   const side = line.role === "command" ? "user chat-line-command" : line.role;
   return <article className={`chat-line chat-line-${side}${other ? " chat-line-other" : ""}${line.pending ? " chat-line-pending" : ""}`} title={when}>
     {other && <span className="chat-line-author">{line.author}</span>}
-    {line.agent && <span className="chat-line-author chat-line-agent">{line.agent === "assistant" ? assistant : line.agent}</span>}
     {line.role === "assistant"
       ? <Markdown source={line.text} kinds={kinds} className="md chat-line-body" images={false} />
       : <p className="chat-line-body">{line.text}</p>}
@@ -716,25 +728,4 @@ function goalStrip({ condition, lastReason }: Goal): string {
 
 function forkedTimes(count: number): string {
   return count === 1 ? "Forked once." : `Forked ${count} times.`;
-}
-
-/** The record the page names by `Kind#seq`, once its id is found. */
-function ChatScreenRef({ kind, seq }: { readonly kind: string; readonly seq: number }) {
-  const id = useQuery(detailQueries.ref(kind, seq));
-  return <ChatScreenContext id={id.data ?? null} label={`${kind}#${seq}`} />;
-}
-
-/** What is on screen: the record the page shows, as it changes. */
-function ChatScreenContext({ id, label }: { readonly id: string | null; readonly label: string }) {
-  return (
-    <p className="chat-record-context" aria-label="Screen context">
-      On screen: {id ? <ChatScreenTitle id={id} label={label} /> : label}
-    </p>
-  );
-}
-
-function ChatScreenTitle({ id, label }: { readonly id: string; readonly label: string }) {
-  const record = useQuery(detailQueries.detail(id));
-  useLiveDetail(id);
-  return record.data ? `${record.data.self.kind}#${record.data.self.seq} ${record.data.self.title}` : label;
 }

@@ -28,6 +28,7 @@ from trackinizer.server.api.canvas_test_support import (
 from trackinizer.server.chat_hub import ChatHub
 from trackinizer.server.inbound import InboundQueue
 from trackinizer.wire.bodies import SubmitAgentSession
+from trackinizer.wire.wire_science_chat import chat_session_id
 
 
 if TYPE_CHECKING:
@@ -83,13 +84,13 @@ async def _edges(store: Store, session: uuid.UUID) -> list[uuid.UUID]:
 
 
 async def _labels(store: Store, session: uuid.UUID) -> list[str]:
-    """Return a session's labels."""
+    """Return a session's labels; a session that never got one has none."""
     async with store.engine.acquire() as conn:
         labels = await conn.fetchval(
             "SELECT labels FROM inquiries WHERE id = $1",
             session,
         )
-    return sorted(from_plain(labels, list[str]))
+    return sorted(from_plain(labels, list[str], default=[]))
 
 
 async def _stations(store: Store) -> list[str]:
@@ -335,6 +336,43 @@ async def test_the_git_label_drops_credentials_from_the_origin(
 
 @pytest.mark.db_pglite
 @pytest.mark.asyncio(loop_scope="session")
+async def test_the_run_answering_a_chat_is_placed_on_the_station_that_holds_it(
+    pglite_route_client: _Client,
+) -> None:
+    """So it can point that canvas, and it makes no station, edge or label of its own."""
+    client, store = pglite_route_client
+    await seed_accounts(store)
+    conversation = uuid.uuid4()
+    browser()
+    held = await client.post(f"/api/workspaces/for-chat/{conversation}")
+    assert held.status_code == 200, held.text
+    station = uuid.UUID(from_plain(json_loads(held.content, dict[str, object])["id"], str))
+    session = await seed_session(
+        store,
+        USER_AGENT,
+        cli="claude",
+        cli_session_id=chat_session_id(conversation),
+    )
+
+    placed = await _place(client, session)
+
+    assert from_plain(placed["workspace_id"], str) == str(station)
+    async with store.engine.acquire() as conn:
+        named = await conn.fetchrow(
+            "SELECT station->>'workstream_id' AS workstream FROM visual_workspaces "
+            "WHERE id = $1",
+            station,
+        )
+    assert placed["workstream_id"] == named["workstream"]
+    assert (
+        await _stations(store),
+        await _edges(store, session),
+        await _labels(store, session),
+    ) == ([str(station)], [], [])
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
 @pytest.mark.parametrize(
     ("cli", "cli_session_id", "account"),
     [
@@ -342,7 +380,7 @@ async def test_the_git_label_drops_credentials_from_the_origin(
         ("claude", None, "bot@service.invalid"),
     ],
 )
-async def test_chats_and_service_accounts_are_not_placed(
+async def test_a_chat_no_station_holds_and_a_service_account_are_not_placed(
     pglite_route_client: _Client,
     cli: str,
     cli_session_id: str | None,

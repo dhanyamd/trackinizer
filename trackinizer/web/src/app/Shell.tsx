@@ -10,12 +10,14 @@ import { PaletteView } from "../palette";
 import { lazyView, useLoaded } from "../router/lazy";
 import { formatRoute, type Route } from "../router/route";
 import { useRouter } from "../router/router";
-import { ActivityView, AdminView, ConsoleView, CreateView, DetailView, GraphView, SearchView, SettingsView } from "../router/views";
+import { ActivityView, AdminView, BlocksView, ConsoleView, CreateView, DetailView, GraphView, SearchView, SettingsView } from "../router/views";
 import { BarStack, OfflineBar, PausedBar } from "../ui/bars";
 import { Icon } from "../ui/icons";
 import { kindLook } from "../ui/kinds";
 import { EmptyState, ViewHeader } from "../ui/view";
 import { useMeta, useProfile, useWriteMode } from "./boot";
+import { Rail } from "./Rail";
+import { StatusBar } from "./StatusBar";
 import { TopBar } from "../topbar/TopBar";
 
 /**
@@ -46,8 +48,9 @@ type SheetRoute = Extract<Route, { name: "settings" | "admin" }>;
 /**
  * The signed-in app: the top bar, the bars, the current route's view, and the
  * palette and the create form, with the shell's own commands. The top bar
- * stands over everything; under it, Chat's column and the canvas around the
- * page, or the page alone with no canvas.
+ * stands over everything; under it, the rail down the left, then Chat's column
+ * and the canvas around the page, or the page alone with no canvas; the status
+ * line closes the window.
  */
 export function Shell() {
   const { route, navigate } = useRouter();
@@ -120,26 +123,33 @@ export function Shell() {
     <PaletteContext value={palette}>
         <div className={withCanvas ? "app with-canvas" : "app"}>
           <TopBar stations={withCanvas} />
-          <main className="main">
-            <BarStack>
-              <OfflineBar />
-              <PausedBar />
-              {/* A view whose chunk is still loading (src/router/views.ts) holds an empty, busy frame. */}
-              <Suspense fallback={<div className="view" aria-busy="true" />}>
-                {/* The canvas holds the shell's busy frame until its chunk is in, then mounts the page once, inside it. */}
-                {visualWorkspaceEnabled ? (
-                  canvasLoaded ? (
-                    <ChatColumn sheet={sheetView}><Canvas><RouteView route={view ?? background} /></Canvas></ChatColumn>
+          <div className="app-body">
+            <Rail />
+            <main className="main">
+              <BarStack>
+                <OfflineBar />
+                <PausedBar />
+                {/* A view whose chunk is still loading (src/router/views.ts) holds an empty, busy frame. */}
+                <Suspense fallback={<div className="view" aria-busy="true" />}>
+                  {/* The canvas holds the shell's busy frame until its chunk is in, then mounts the page once, inside it. */}
+                  {visualWorkspaceEnabled ? (
+                    canvasLoaded ? (
+                      <ChatColumn sheet={sheetView}><Canvas><RouteView route={view ?? background} /></Canvas></ChatColumn>
+                    ) : (
+                      <div className="view" aria-busy="true" />
+                    )
                   ) : (
-                    <div className="view" aria-busy="true" />
-                  )
-                ) : (
-                  <RouteView route={view ?? background} />
-                )}
-              </Suspense>
-              {visualWorkspaceEnabled ? null : sheetView}
-            </BarStack>
-          </main>
+                    <RouteView route={view ?? background} />
+                  )}
+                </Suspense>
+                {visualWorkspaceEnabled ? null : sheetView}
+              </BarStack>
+            </main>
+          </div>
+          {/* The status line is about the chat's station and its run, so it stands only where
+              there is one. Mounted on a build with no canvas it read the workspace on every
+              route and said nothing with it. */}
+          {visualWorkspaceEnabled && <StatusBar />}
         </div>
         {route.name === "new" ? (
           <Suspense>
@@ -172,6 +182,8 @@ function RouteView({ route }: { route: ViewRoute }) {
       return <SearchView q={route.q} />;
     case "graph":
       return <GraphView />;
+    case "blocks":
+      return <BlocksView />;
     case "notFound":
       return (
         <div className="view">

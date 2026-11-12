@@ -452,9 +452,7 @@ with one response shape, so the fixtures take one per verb.
 - Chat sends the page it is on: each line carries `page`, the `#/...` hash as it
   is sent, and `trail`, the up to 8 hashes before it, oldest first (routes only;
   the server resolves their records). `src/router/trail.ts` records them from
-  `main.tsx` on, so pages visited before Chat opened count. Chat shows
-  `On screen: Kind#seq title` for the record a `#/lookup/<id>` or
-  `#/ref/<Kind>/<seq>` page shows, and follows the page; a line pins no record.
+  `main.tsx` on, so pages visited before Chat opened count; a line pins no record.
 - The partner is the shared assistant; with none live, Chat says it is off
   (`ChatOff`) and the box is off.
 - Who reads a chat is the server's call, and its head says it: `audience` is
@@ -536,11 +534,8 @@ with one response shape, so the fixtures take one per verb.
   parts and records are read incrementally, part by part, and
   `readTranscript` (`chatLines.ts`) turns them into lines. A person's line
   (`AgentToAgentMessage`) shows its sender when it is not the signed-in user's;
-  an `AssistantMessage` with content is an answer, named by the agent its part's
-  `format` says wrote it (`sagent`, the server's assistant by its name; `claude`;
-  `codex`), so each answer of a chat that switched provider keeps its own. A
-  `ContextCompaction` is a "Context compacted" line, one for the records that name
-  one act. `useLiveChat` registers on the
+  an `AssistantMessage` with content is an answer. A `ContextCompaction` is a
+  "Context compacted" line, one for the records that name one act. `useLiveChat` registers on the
   live hub and reads what the session gained when the canvas stream's `changed`
   ids include the session (or on a gap), so every viewer of a chat sees a
   teammate's line. The reads use the app's read retry.

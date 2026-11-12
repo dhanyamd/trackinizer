@@ -16,7 +16,7 @@ test("a person's line is a message from its poster, an answer an assistant messa
     record(4, "TurnContext", {}), answer(5, "")));
   expect(lines).toEqual([
     { key: "0:0", at: { part: 0, idx: 0 }, role: "user", author: "ada@example.com", text: "what is X?", sentAt: null, pending: false },
-    { key: "0:3", at: { part: 0, idx: 3 }, role: "assistant", author: null, text: "X is Y.", sentAt: null, pending: false, agent: "assistant" },
+    { key: "0:3", at: { part: 0, idx: 3 }, role: "assistant", author: null, text: "X is Y.", sentAt: null, pending: false },
   ]);
 });
 
@@ -374,19 +374,6 @@ test("a trust prompt a CLI waits on is a line with its folder, machine and remem
   expect(malformed.lines).toHaveLength(0);
   const home = readTranscript(parts(trust(0, { id: "t3", machine: null, remembered: true })));
   expect(home.lines[0]!.prompt).toMatchObject({ machine: null, remembered: true, resolution: null });
-});
-
-test("an answer names the agent whose part wrote it, so each reply of a chat that switched keeps its own", () => {
-  const { lines } = readTranscript([
-    { part: 0, format: "sagent", records: [said(0, ME, "q"), answer(1, "from the assistant")] },
-    { part: 1, format: "claude", records: [stamped(answer(0, "from claude"), "2030-01-01T00:00:00Z")] },
-    { part: 2, format: "codex", records: [stamped(answer(0, "from codex"), "2030-01-02T00:00:00Z")] },
-    { part: 3, format: "", records: [stamped(answer(0, "from a part of no known format"), "2030-01-03T00:00:00Z")] },
-  ]);
-  expect(lines.map(({ role, agent, text }) => [role, agent, text])).toEqual([
-    ["user", undefined, "q"], ["assistant", "assistant", "from the assistant"], ["assistant", "claude", "from claude"],
-    ["assistant", "codex", "from codex"], ["assistant", undefined, "from a part of no known format"],
-  ]);
 });
 
 // What AgentSession#82 on alpha holds for a /compact typed in Chat: trax run's `$command` on a part of its own, and on

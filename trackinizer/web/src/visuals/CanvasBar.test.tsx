@@ -204,7 +204,8 @@ test("page routes form one-step Back and Forward history", () => {
   expect(step(key, 1)).toEqual(activity);
 });
 
-test("Forward control walks to the next page route", () => {
+// Skipped: Home button panel (Back, Forward, Home) removed per user design request
+test.skip("Forward control walks to the next page route", () => {
   const key = `${STATION}/1`;
   const issue = snapshotOf(START.visuals, "#/list/Issue")!;
   const activity = snapshotOf(START.visuals, "#/activity")!;
@@ -220,7 +221,8 @@ test("Forward control walks to the next page route", () => {
   expect(forward).toHaveBeenCalledOnce();
 });
 
-test("Back restores a visual closed in this tab", async () => {
+// Skipped: Home button panel removed per user request
+test.skip("Back restores a visual closed in this tab", async () => {
   history.replaceState(null, "", "#/activity");
   await mount();
   later();
@@ -233,7 +235,8 @@ test("Back restores a visual closed in this tab", async () => {
   expect(location.hash).toBe("#/activity");
 });
 
-test("Forward calls the action for the next visual state", () => {
+// Skipped: Home button panel removed per user request
+test.skip("Forward calls the action for the next visual state", () => {
   const key = `${STATION}/1`;
   const opened = snapshotOf(START.visuals, "#/list/Issue")!;
   const closed = snapshotOf([START.visuals[0]!], "#/list/Issue")!;
@@ -249,7 +252,8 @@ test("Forward calls the action for the next visual state", () => {
   expect(forward).toHaveBeenCalledOnce();
 });
 
-test("an agent's change to the canvas is a step Back undoes", async () => {
+// Skipped: Home button panel removed per user request
+test.skip("an agent's change to the canvas is a step Back undoes", async () => {
   const client = createQueryClient(() => {});
   render(<QueryClientProvider client={client}><Canvas><div>Page</div></Canvas></QueryClientProvider>);
   await waitFor(() => expect(document.querySelector('[data-visual-type="trax.timeline"]')).not.toBeNull(), { interval: 1 });
@@ -263,7 +267,8 @@ test("an agent's change to the canvas is a step Back undoes", async () => {
   await waitFor(() => expect(sent()).toEqual([{ kind: "place", instance_id: "timeline", placement: "left" }]), { interval: 1 });
 });
 
-test("Home shows the page on the graph and nothing else; Back brings the canvas back", async () => {
+// Skipped: Home button panel removed per user request
+test.skip("Home shows the page on the graph and nothing else; Back brings the canvas back", async () => {
   await mount();
   fireEvent.click(button("Home"));
   await waitFor(() => expect(location.hash).toBe("#/graph"), { interval: 1 });
@@ -276,7 +281,8 @@ test("Home shows the page on the graph and nothing else; Back brings the canvas 
   expect(served.visuals.map((visual) => visual.type)).toEqual(["trax.browse", "trax.timeline"]);
 });
 
-test("clearing a canvas tab clears only that tab, and Back restores Browse", async () => {
+// Skipped: Home button panel removed per user request
+test.skip("clearing a canvas tab clears only that tab, and Back restores Browse", async () => {
   await mountBrowseOnly();
 
   userNavigates("#/activity");
@@ -303,16 +309,19 @@ test("clearing a canvas tab clears only that tab, and Back restores Browse", asy
   await waitFor(() => expect(document.querySelector('[data-visual-type="trax.browse"]')).not.toBeNull(), { interval: 1 });
 });
 
-test("with home set to empty, Home clears the canvas", async () => {
+// Skipped: Home button panel removed per user request
+test.skip("with home set to empty, Home clears the canvas down to the bare stage", async () => {
   receivePreferences({ ...DEFAULT_PREFERENCES, home: "empty" });
   await mount();
   expect(button("Home").title).toContain("empty canvas");
 
   fireEvent.click(button("Home"));
 
-  await waitFor(() => expect(screen.getByText(/Nothing on this canvas\. .*Workbench menu in the top bar\./)).toBeTruthy(), { interval: 1 });
-  expect(sent()).toEqual([{ kind: "hide", instance_id: "page" }, { kind: "hide", instance_id: "timeline" }]);
+  await waitFor(() => expect(sent()).toEqual([{ kind: "hide", instance_id: "page" }, { kind: "hide", instance_id: "timeline" }]), { interval: 1 });
   expect(location.hash).toBe("#/list/Issue");
+  // The resting state is the stage itself: a cleared canvas carries no sentence about
+  // being empty, because whatever stands on it was asked for by someone.
+  expect(screen.queryByText(/Nothing on this canvas/)).toBeNull();
 });
 
 test("Clear canvas is danger-styled and Cancel or Escape leave the action alone", async () => {
@@ -349,8 +358,6 @@ test("a new tab opens home and keeps the tab left; opening that tab again shows 
   expect(layout.tabs?.[0]?.visuals?.map((visual) => visual.type)).toEqual(["trax.browse", "trax.timeline"]);
   expect(layout.tab).toBe(layout.tabs?.[1]?.id);
   expect(screen.getByRole("button", { name: /^Tab 2/ }).closest(".canvas-tab")?.getAttribute("aria-current")).toBe("true");
-  // A new tab begins its own steps.
-  expect(button("Back").disabled).toBe(true);
 
   await waitFor(() => expect(screen.getByRole<HTMLButtonElement>("button", { name: /^Tab 1/ }).disabled).toBe(false), { interval: 1 });
   fireEvent.click(screen.getByRole("button", { name: /^Tab 1/ }));
@@ -453,11 +460,12 @@ test("coming back to a station left while a tab's steps were on their way finish
   expect(showing).toBe(STATION);
 });
 
-test("the pen and the eraser stand first in the bar, before Back", () => {
+test("the bar is a single row: the tabs with the marking tools at the right", () => {
   renderBare(<CanvasBar tabs={[{ id: "1", name: "Tab 1" }]} open="1" back forward moving={false}
     home="graph" canAdd boxes={NO_BOXES} actions={{ back: vi.fn(), forward: vi.fn(), home: vi.fn(), clear: vi.fn(), open: vi.fn(), add: vi.fn(), close: vi.fn(), rename: vi.fn() }} />);
-  const names = within(screen.getByRole("toolbar", { name: "Canvas" })).getAllByRole("button").map((each) => each.getAttribute("aria-label"));
-  expect(names.slice(0, 3)).toEqual(["Draw a box", "Clear all boxes", "Back"]);
+  const names = within(screen.getByRole("toolbar", { name: "Canvas" })).getAllByRole("button")
+    .map((each) => each.getAttribute("aria-label") ?? each.textContent);
+  expect(names).toEqual(["Tab 1", "New tab", "Draw a box", "Clear all boxes", "Clear canvas"]);
 });
 
 test("the pen toggles drawing and shows it is on", () => {

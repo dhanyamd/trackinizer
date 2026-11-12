@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import ValidationError
 
 import pytest
@@ -9,6 +11,7 @@ import pytest
 from trackinizer.server.visuals.catalog import (
     ContextGraphVisual,
     FilesVisual,
+    KnowledgeVisual,
     ParameterDescription,
     StaticVisual,
     TerminalVisual,
@@ -25,12 +28,29 @@ def test_default_workspace_builds_the_default_catalog() -> None:
     assert [visual.type for visual in default_catalog().visuals] == [
         "trax.browse",
         "trax.subgraph",
+        "trax.knowledge",
         "trax.timeline",
         "trax.artifact",
         "trax.summary",
         "trax.files",
         "trax.terminal",
+        "trax.blocks",
     ]
+
+
+def test_every_registered_visual_is_named_in_the_agent_skill() -> None:
+    """A seat that cannot read a type's name from its skill never asks for it.
+
+    Measured: with `trax.knowledge` missing from the SKILL.md list, a real Claude
+    turn asked for what a record stands on chose `trax.subgraph` instead.
+    """
+    skill = (
+        Path(__file__).parents[2] / "trax" / "docs" / "skills" / "trax" / "SKILL.md"
+    ).read_text()
+    missing = [
+        visual.type for visual in default_catalog().visuals if visual.type not in skill
+    ]
+    assert missing == []
 
 
 def test_a_type_that_is_not_registered_has_no_description() -> None:
@@ -61,6 +81,8 @@ def test_static_visual_is_configured_by_data() -> None:
         ["record"],
     )
     assert described.default_size == "compact"
+    # No placement of its own, so a show of it still lands by the size rule.
+    assert described.default_placement is None
     assert described.parameter_schema == {}
 
 
@@ -79,11 +101,13 @@ def test_record_visuals_name_the_kinds_they_accept() -> None:
     assert kinds == {
         "trax.browse": [],
         "trax.subgraph": None,
+        "trax.knowledge": None,
         "trax.timeline": None,
         "trax.artifact": ["Artifact"],
         "trax.summary": ["Issue", "AgentSession"],
         "trax.files": None,
         "trax.terminal": None,
+        "trax.blocks": None,
     }
 
 
@@ -116,6 +140,24 @@ def test_context_graph_bounds_its_reach_and_its_highlight() -> None:
     )
 
 
+def test_knowledge_bounds_its_reach_and_names_one_claim() -> None:
+    """The fold takes claims 1 to 3 edges out, 2 unless asked, and opens one by id."""
+    described = KnowledgeVisual.Config().make().describe()
+    assert (described.type, described.requires, described.default_size) == (
+        "trax.knowledge",
+        ["record"],
+        "wide",
+    )
+    # The fold is the answer over the stage, not a third lane in the page's row.
+    assert described.default_placement == "floating"
+    assert set(described.parameter_schema) == {"hops", "claim"}
+    hops = described.parameter_schema["hops"]
+    assert (hops.type, hops.default, hops.minimum, hops.maximum) == ("integer", 2, 1, 3)
+    claim = described.parameter_schema["claim"]
+    assert (claim.type, claim.default, claim.max_length) == ("string", "", 512)
+    assert default_workspace().visual("trax.knowledge") == described
+
+
 def test_terminal_needs_no_record_and_bounds_its_machine_and_has_no_terminal_id() -> (
     None
 ):
@@ -145,6 +187,7 @@ def test_files_takes_any_record_and_bounds_its_narrowing() -> None:
         ),
         "requires": ["record"],
         "default_size": "wide",
+        "default_placement": None,
         "parameter_schema": {
             "path": {
                 "type": "string",

@@ -21,7 +21,7 @@ const listeners = new Set<() => void>();
  * follows them; whether Chat is hidden or full screen is this tab's alone and never
  * kept, so a reload shows it.
  */
-let state: ChatColumnState = { side: preferences().chat_side, hidden: false, fullscreen: false };
+let state: ChatColumnState = { side: "left", hidden: false, fullscreen: false };
 
 /** Chat is hidden because the workbench stood three columns: fewer give it back. */
 let hiddenByColumns = false;

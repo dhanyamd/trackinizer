@@ -1789,7 +1789,8 @@ def test_a_user_with_no_station_gets_the_first_one_named_and_read_back() -> None
         "hidden": False,
         "pinned": False,
     }
-    assert WorkspaceData.model_validate(data).visuals[0].type == "trax.browse"
+    # The redesign's rule: a new station opens on the empty black stage.
+    assert WorkspaceData.model_validate(data).visuals == []
     assert asked[3] == (_LATEST, (_USER,))
     assert state.id == _STATION
     assert state.assistant is None

@@ -13,8 +13,9 @@ vi.mock("../graph/renderer", async () => ({ forceGraphRenderer: new (await impor
 
 const ID = "00000000-0000-4000-8000-000000000007";
 const BOOT = ["/api/me/profile", "/api/meta/edges", "/api/meta/enums", "/api/meta/fields"];
-/** Reads the shell sends once it renders, beside its view's: never started early. */
-const SHELL: string[] = [];
+/** Reads the shell sends once it renders, beside its view's: never started early.
+ *  The bar is always up, so Machines is always one of them. */
+const SHELL: string[] = ["/api/terminals/machines"];
 const PROFILE = { user_id: "u1", email: "ada@example.com", name: "Ada", role: "writer", last_login: null, visual_workspace_enabled: false, ...AGREED };
 
 const BODIES: { [path: string]: unknown } = {
@@ -76,8 +77,6 @@ beforeAll(() => Promise.all([DetailView.preload(), GraphView.preload()]));
 beforeEach(() => {
   history.replaceState(null, "", location.pathname);
   sessionStorage.clear();
-  // The bar starts pinned, and an open bar reads Machines; these tests count the reads of the page.
-  localStorage.setItem("trackinizer.topbar.pinned", "0");
   vi.stubGlobal("EventSource", FakeEventSource);
   // jsdom has none; a list scrolls its focused row into view.
   Element.prototype.scrollIntoView = () => {};

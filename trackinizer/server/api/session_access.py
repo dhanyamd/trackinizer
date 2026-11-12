@@ -39,7 +39,9 @@ History. Its transcript is one part per run that answered in it: a new part, or 
 attaching to it, comes from its opening key, the configured assistant's or its
 starter's, and each part is written by the key that opened it alone, so no run
 rewrites another's lines. A chat is known by its ``chat:`` id alone, whoever opened
-it and whether or not an assistant is configured.
+it and whether or not an assistant is configured. Under ``--no-auth`` a caller holds no
+key at all, so these key tests fall to the account, which gives nothing away: that mode
+has one account, and anyone reaching its port may already edit everything.
 """
 
 from __future__ import annotations
@@ -53,6 +55,7 @@ from fastapi import HTTPException
 from treekle import from_plain
 
 from trackinizer.server.api._deps import (
+    auth_is_disabled,
     get_assistant,
     get_chat_orgs,
     get_staff,
@@ -246,6 +249,17 @@ def is_a_science_chat(session: AgentSession) -> bool:
     return (session.cli_session_id or "").startswith(CHAT_SESSION_PREFIX)
 
 
+def _keyed(request: Request) -> bool:
+    """Say whether this server attributes a session to a caller by its API key.
+
+    ``--no-auth`` resolves a request to the server's one synthetic account before it
+    reads a bearer (``auth.user_of``), so no caller holds a key while a chat session
+    still names one. The account stands in, as the resume path already degrades to
+    ``cli_session_id`` alone (``store/session.py``).
+    """
+    return not auth_is_disabled(request)
+
+
 async def require_chat_writer(
     request: Request,
     identity: AuthIdentity,
@@ -258,6 +272,8 @@ async def require_chat_writer(
     that opened it, any key of the configured assistant's account, or any key of the
     account that started it (:func:`~trackinizer.server.visuals.science_chats.read_starter`).
     A browser has no key to own a part by, so it adds none. Any other session passes.
+    Under ``--no-auth`` a keyless caller is asked of its account, the one this server
+    has; with auth on, a caller with no key reaches none of the checks below.
 
     Args:
       request: The request, which carries the store and the configuration.
@@ -274,7 +290,8 @@ async def require_chat_writer(
         return
     assistant = get_assistant(request)
     conversation_id = chat_conversation_id(session.cli_session_id)
-    if identity.api_key_id is not None and conversation_id is not None:
+    may_claim = identity.api_key_id is not None or not _keyed(request)
+    if may_claim and conversation_id is not None:
         if _is_the_assistant(identity, assistant):
             return
         async with get_store(request).engine.acquire() as conn:
@@ -330,6 +347,7 @@ async def require_part_writer(
             identity,
             cli_session_id=session.cli_session_id,
             opener=session.opened_by_api_key_id,
+            keyed=_keyed(request),
         )
     elif identity.api_key_id != manifest.opened_by_api_key_id:
         raise HTTPException(
@@ -587,7 +605,12 @@ async def require_session_row_write(
     if row is None or row.kind != "AgentSession":
         return
     _require_audience(identity, row=row)
-    _refuse_a_stranger(identity, cli_session_id=row.cli_session_id, opener=row.opener)
+    _refuse_a_stranger(
+        identity,
+        cli_session_id=row.cli_session_id,
+        opener=row.opener,
+        keyed=_keyed(request),
+    )
 
 
 async def require_row_purge(
@@ -624,6 +647,7 @@ async def require_row_purge(
             identity,
             cli_session_id=row.cli_session_id,
             opener=row.opener,
+            keyed=_keyed(request),
         )
     elif not _holds(identity, row=row):
         raise HTTPException(
@@ -793,9 +817,14 @@ def _refuse_a_stranger(
     *,
     cli_session_id: str | None,
     opener: uuid.UUID | None,
+    keyed: bool,
 ) -> None:
-    """Refuse the write to a science chat that ``identity`` did not open."""
-    if identity.api_key_id != opener and (cli_session_id or "").startswith(
+    """Refuse the write to a science chat that ``identity`` did not open.
+
+    ``keyed`` is :func:`_keyed`: a server that issues no keys has no stranger to keep
+    out of the only account's chat.
+    """
+    if keyed and identity.api_key_id != opener and (cli_session_id or "").startswith(
         CHAT_SESSION_PREFIX,
     ):
         raise HTTPException(

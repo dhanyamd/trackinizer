@@ -14,10 +14,10 @@ const MachinesPanel = lazyView(() => import("./MachinesPanel"), (module) => modu
  * own machines, how to connect one, and what this server provides, as its
  * deployment notes it. A dot on the button says one of the machines is online.
  * The machines are the terminal's read, under the key it uses with no station,
- * so the two caches agree. They are read only while the bar is `shown`, and
- * again each minute it stays so: a page's first reads stay its own, and a
- * folded bar shows no dot to keep current. A server without sign-in, and a
- * viewer, connect no machine, so neither asks for them.
+ * so the two caches agree. They are read while the bar is `shown` — which it
+ * now always is — and again each minute: the dot stays current for as long as
+ * there is a bar to show it on. A server without sign-in, and a viewer,
+ * connect no machine, so neither asks for them.
  */
 export function MachinesMenu({ shown }: { readonly shown: boolean }) {
   const profile = useProfile();

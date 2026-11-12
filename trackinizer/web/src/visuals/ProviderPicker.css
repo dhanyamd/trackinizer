@@ -25,11 +25,13 @@
 .provider-folder input { width: 220px; min-width: 0; font: inherit; }
 .chat-info-run { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .provider-notice { margin: 0; color: var(--error-text); }
-/* The header's provider button, and its card's menu under it. */
-.chat-provider-pick { position: relative; display: inline-flex; min-width: 0; }
-.chat-provider-button { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 260px; padding: 2px 6px; border: 0; border-radius: 4px; background: none; color: var(--text); font-size: 12px; cursor: pointer; }
-.chat-provider-button:hover, .chat-provider-button[aria-expanded="true"] { background: var(--surface-hover); }
-.chat-provider-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.chat-provider-menu { left: 0; right: auto; top: 100%; }
+/* The provider control of the hints row (ChatHints), and its card opening up over the log: the
+   row stands at the bottom of the column, so a menu hung under it would leave the screen. */
+.chat-hints-pick { position: relative; display: inline-flex; min-width: 0; }
+.chat-hints .prov { display: inline-flex; align-items: baseline; gap: 4px; min-width: 0; max-width: 200px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 500; cursor: pointer; }
+.chat-hints .prov:hover, .chat-hints .prov[aria-expanded="true"] { text-decoration: underline; }
+.chat-hints .prov-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chat-hints .prov-caret { color: var(--muted); font-weight: 400; }
+.chat-hints .chat-hints-menu { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; }
 .provider-new { display: flex; flex-direction: column; }
 .provider-mark { color: var(--accent); font-size: 11px; }

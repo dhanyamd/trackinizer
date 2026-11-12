@@ -440,17 +440,18 @@ class TestDetailFormats:
                     "title": "finding",
                 },
                 # proves/favors store Artifact -> claim, so on the cited Belief
-                # they are INBOUND (backlinks) and read proved_by / favored_by.
+                # they are INBOUND (backlinks) and read the inverse labels:
+                # supported_by / suggested_by.
                 "backlinks": {
                     "proves": [{"kind": "Experiment", "seq": 4, "title": "evidence"}],
                     "favors": [{"kind": "Paper", "seq": 1, "title": "context"}],
                 },
             },
         )
-        assert "proved_by:" in text
-        assert "favored_by:" in text
-        assert "proves:" not in text
-        assert "favors:" not in text
+        assert "supported_by:" in text
+        assert "suggested_by:" in text
+        assert "supports:" not in text
+        assert "suggests:" not in text
 
     def test_format_show_uses_artifact_facing_citation_names(self) -> None:
         text = render.format_show(
@@ -462,11 +463,12 @@ class TestDetailFormats:
                     "status": "active",
                     "title": "evidence",
                 },
-                # On the citing Artifact the proves edge is OUTBOUND, read proves.
+                # On the citing Artifact the proves edge is OUTBOUND, read supports.
                 "edges": {"proves": [{"kind": "Belief", "seq": 5, "title": "finding"}]},
             },
         )
-        assert "proves:" in text
+        assert "supports:" in text
+        assert "supported_by:" not in text
         assert "proved_by:" not in text
 
     def test_format_show_defaults_owner(self) -> None:

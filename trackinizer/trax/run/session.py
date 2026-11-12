@@ -248,6 +248,17 @@ _CANVAS_NOTE: Final = (
     "This conversation is already logged to trax as the chat's AgentSession; "
     "file each result to trax with the `trax` CLI as a row, with `--as` set to "
     "$TRAX_ACTOR (`trax help` lists the grammar). "
+    "Before you compose an answer for the canvas, read the design brief end to end "
+    "in the turn you compose it: DESIGN.md and LAW.md, in the trax skill directory "
+    "beside SKILL.md. Read them whole, not by grep, and not from memory of an "
+    "earlier turn -- a session reads them once and then composes for days off what "
+    "it can still recall, which is a heading, some prose and a table, because those "
+    "are what anyone recalls. The catalog is far larger than that and the brief is "
+    "the only place it exists. Which component an answer needs is yours to judge "
+    "with the catalog open; it cannot be judged from memory of having read it. "
+    "Always give every composed flow a concise, specific `title` tailored to the question "
+    "being investigated (e.g. 'Code review · 350M sweep', 'Block sparsity mask', 'Belief formation') "
+    "so the canvas tab and header are named dynamically after the prompt, never generic 'Tab 1' or 'Canvas'. "
     f"{CANVAS_COMMANDS}"
 )
 

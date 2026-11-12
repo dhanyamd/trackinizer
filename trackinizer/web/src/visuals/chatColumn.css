@@ -7,6 +7,9 @@
 /* A third of the screen or 80 characters, whichever is less. The characters are Chat's own, so the font is set on the column: `ch` is measured where the width is used. The 24 px is the padding of Chat's lines. */
 .chat-column { display: flex; flex: 0 0 var(--chat-width, min(33.333vw, calc(80ch + 24px))); flex-direction: column; min-width: 280px; max-width: 70%; min-height: 0; font-size: 13px; border-right: 1px solid var(--line); }
 .chat-row-right .chat-column { border-right: 0; border-left: 1px solid var(--line); }
+/* Monochromatic border parting the chat from the canvas: clean neutral line. */
+:root:not([data-skin]) .chat-column { border-right-color: var(--line-strong, #343538); }
+:root:not([data-skin]) .chat-row-right .chat-column { border-left-color: var(--line-strong, #343538); }
 .chat-row-fullscreen .chat-column { flex: 1 1 auto; max-width: none; border: 0; }
 /* The edge between the column and the workbench: 6 px to grab, 3 px over each of them, so it takes no room of its own. */
 .chat-column-edge { position: relative; z-index: 5; flex: 0 0 6px; margin: 0 -3px; cursor: col-resize; touch-action: none; }

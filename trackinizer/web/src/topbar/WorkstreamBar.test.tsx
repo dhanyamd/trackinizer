@@ -279,6 +279,27 @@ test("an older list response cannot remove a new workstream or its draft name", 
   expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Workstream name" }).value).toBe("My draft");
 });
 
+// A chip carried `draggable` at all times while also renaming on double-click, so the browser
+// read the rename as the start of a drag and flew the chip's ghost across the screen instead of
+// opening its field. A chip arms for dragging only once the pointer has travelled.
+test("a double-click renames rather than dragging, and a press that travels still drags", async () => {
+  await show();
+  const beta = workstream("Beta");
+  expect(beta.draggable).toBe(false);
+
+  fireEvent.pointerDown(beta, { clientX: 100, clientY: 10 });
+  fireEvent.pointerUp(beta, { clientX: 100, clientY: 10 });
+  fireEvent.doubleClick(beta);
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Workstream name" }).value).toBe("Beta");
+  expect(document.querySelector(".workstream-title[draggable='true']")).toBeNull();
+
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "Workstream name" }), { key: "Escape" });
+  const again = workstream("Beta");
+  fireEvent.pointerDown(again, { clientX: 100, clientY: 10 });
+  fireEvent.pointerMove(again, { clientX: 140, clientY: 10 });
+  await waitFor(() => expect(workstream("Beta").draggable).toBe(true));
+});
+
 test("Scratch stays first and offers no unsupported pin or move actions", async () => {
   await show();
   const scratch = workstream("Scratch");

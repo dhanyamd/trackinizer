@@ -57,11 +57,20 @@ def _with_graph(catalog: VisualCatalogBody) -> WorkspaceData:
     )
 
 
-def test_a_new_canvas_holds_only_its_default_visual() -> None:
-    """Chat is a column of its own, so the canvas starts with the page alone."""
+def test_a_new_canvas_starts_empty_on_the_black_stage() -> None:
+    """The redesign's rule: nothing opens by itself — a visual appears only
+    when a show asks for one. A new canvas holds no visuals at all.
+    """
     data = initial_data(default_catalog())
-    assert [(v.type, v.placement) for v in data.visuals] == [("trax.browse", "main")]
+    assert data.visuals == []
     assert data.focused_instance is None
+    # And the first show works on the empty canvas the same as any other.
+    shown = apply_operation(
+        data,
+        ShowVisual(kind="show", visual_type="trax.knowledge", record_id=uuid.uuid4()),
+        default_catalog(),
+    )
+    assert [v.type for v in shown.visuals] == ["trax.knowledge"]
 
 
 def test_chat_is_no_visual_so_showing_it_is_refused_like_any_unknown_type() -> None:
@@ -112,7 +121,16 @@ def test_a_stored_canvas_that_holds_chat_reads_without_it() -> None:
 def test_a_visual_is_placed_at_either_side_of_the_page_and_nowhere_unnamed() -> None:
     """A visual moves to the column left of the page and back; another name is refused."""
     catalog = default_catalog()
-    data = _with_graph(catalog)
+    data = apply_operation(
+        initial_data(catalog),
+        ShowVisual(kind="show", visual_type="trax.browse"),
+        catalog,
+    )
+    data = apply_operation(
+        data,
+        ShowVisual(kind="show", visual_type="trax.subgraph", record_id=uuid.uuid4()),
+        catalog,
+    )
     graph = data.visuals[1].id
     sides: tuple[Placement, ...] = ("left", "side")
     for placement in sides:
@@ -131,11 +149,38 @@ def test_a_visual_is_placed_at_either_side_of_the_page_and_nowhere_unnamed() -> 
         )
 
 
+def test_a_show_lands_where_the_catalog_says_not_where_the_size_alone_would() -> None:
+    """A fold floats over the stage; an ask naming a placement still beats it."""
+    catalog = default_catalog()
+    fresh = initial_data(catalog)
+    fold = apply_operation(
+        fresh,
+        ShowVisual(
+            kind="show", visual_type="trax.knowledge", record_id=uuid.uuid4()
+        ),
+        catalog,
+    )
+    assert [(v.type, v.placement) for v in fold.visuals] == [
+        ("trax.knowledge", "floating"),
+    ]
+    asked = apply_operation(
+        fresh,
+        ShowVisual(
+            kind="show",
+            visual_type="trax.knowledge",
+            record_id=uuid.uuid4(),
+            placement="side",
+        ),
+        catalog,
+    )
+    assert asked.visuals[0].placement == "side"
+
+
 def test_timeline_is_off_in_a_new_canvas_and_recentres_when_shown_again() -> None:
     """The merged view opens only on request; a second show moves it, not duplicates."""
     catalog = default_catalog()
     fresh = initial_data(catalog)
-    assert [visual.type for visual in fresh.visuals] == ["trax.browse"]
+    assert fresh.visuals == []
     first, second = uuid.uuid4(), uuid.uuid4()
     opened = apply_operation(
         fresh,
@@ -156,16 +201,16 @@ def test_show_reuses_visual_type_and_updates_its_context() -> None:
     """Reopening a visual updates its target without orphaning a duplicate tile."""
     catalog = default_catalog()
     original = _with_graph(catalog)
-    graph_id = original.visuals[1].id
+    graph_id = original.visuals[0].id
     record_id = uuid.uuid4()
     reopened = apply_operation(
         original,
         ShowVisual(kind="show", visual_type="trax.subgraph", record_id=record_id),
         catalog,
     )
-    assert len(reopened.visuals) == 2
-    assert reopened.visuals[1].id == graph_id
-    assert reopened.visuals[1].record_id == record_id
+    assert len(reopened.visuals) == 1
+    assert reopened.visuals[0].id == graph_id
+    assert reopened.visuals[0].record_id == record_id
     assert reopened.focused_instance == graph_id
 
 
@@ -490,7 +535,16 @@ def test_highlight_refuses_too_many_ids_and_non_uuids(ids: object) -> None:
 def test_the_page_can_be_hidden_like_any_other_visual() -> None:
     """Browse is the visual a canvas opens with, not one it must keep."""
     catalog = default_catalog()
-    data = _with_graph(catalog)
+    data = apply_operation(
+        initial_data(catalog),
+        ShowVisual(kind="show", visual_type="trax.browse"),
+        catalog,
+    )
+    data = apply_operation(
+        data,
+        ShowVisual(kind="show", visual_type="trax.subgraph", record_id=uuid.uuid4()),
+        catalog,
+    )
     browse, graph = data.visuals
     hidden = apply_operation(
         data,
@@ -499,17 +553,27 @@ def test_the_page_can_be_hidden_like_any_other_visual() -> None:
     )
     assert [visual.type for visual in hidden.visuals] == ["trax.subgraph"]
     hidden = apply_operation(
-        data,
+        hidden,
         HideVisual(kind="hide", instance_id=graph.id),
         catalog,
     )
-    assert [visual.type for visual in hidden.visuals] == ["trax.browse"]
+    # Every window closed is the redesign's own resting state: the black stage.
+    assert hidden.visuals == []
 
 
 def test_restoring_the_page_shows_it_in_main_and_focuses_it() -> None:
     """A canvas that holds no page gets it back; one that holds it is unchanged."""
     catalog = default_catalog()
-    data = _with_graph(catalog)
+    data = apply_operation(
+        initial_data(catalog),
+        ShowVisual(kind="show", visual_type="trax.browse"),
+        catalog,
+    )
+    data = apply_operation(
+        data,
+        ShowVisual(kind="show", visual_type="trax.subgraph", record_id=uuid.uuid4()),
+        catalog,
+    )
     browse, graph = data.visuals
     assert restore_page(data, catalog=catalog) == data
     without = apply_operation(

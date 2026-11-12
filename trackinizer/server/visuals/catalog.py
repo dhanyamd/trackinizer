@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 __all__ = [
     "ContextGraphVisual",
     "FilesVisual",
+    "KnowledgeVisual",
     "ParameterDescription",
     "StaticVisual",
     "TerminalVisual",
@@ -83,6 +84,9 @@ class VisualDescription(BaseModel):
     description: str
     requires: list[Literal["record"]]
     default_size: Literal["compact", "wide"]
+    default_placement: Literal["main", "side", "floating"] | None = None
+    """Where a show lands when it names no placement; none means the size rule below."""
+
     parameter_schema: dict[str, ParameterDescription]
     record_kinds: list[str] | None = None
     """Kinds of record a show may target: none means any kind, empty means no record."""
@@ -257,6 +261,63 @@ class ContextGraphVisual:
         )
 
 
+class KnowledgeVisual:
+    """The records within reach of one record, each with the rows and the wires that formed it."""
+
+    class Config(Fig["KnowledgeVisual"]):
+        title: str = "What we know"
+        """Name shown in the Configure panel."""
+
+        default_hops: int = 2
+        """Records gathered this many edges from the anchor when the ask names no reach."""
+
+    def __init__(self, config: Config) -> None:
+        """Keep the configured title and reach until projection."""
+        self.config = config
+
+    def describe(self) -> VisualDescription:
+        """Describe the fold and the bounds every caller must respect.
+
+        Returns:
+          description: Inert catalog entry carrying the fold's bounds.
+
+        """
+        return VisualDescription(
+            type="trax.knowledge",
+            version=1,
+            title=self.config.title,
+            description=(
+                "The records within reach of one record, each a block: the belief, "
+                "the papers, runs and issues wired into it, joined by stored edges. "
+                "A block opens to what formed it; a wire opens to who asserted it."
+            ),
+            requires=["record"],
+            default_size="wide",
+            # A fold is the answer, not a second column: measured on a station holding
+            # Browse, a subgraph and this fold as `main` tiles, each lane was ~330px,
+            # so six tiers became six rows and the header collided with `Open in
+            # graph`. Float it over the stage and the same fold is one window. The
+            # graph it used to sit over is no longer drawn unless someone asks for it.
+            default_placement="floating",
+            parameter_schema={
+                # The fold reads records through `/api/web/graph?focus=`, which walks
+                # at most 3 hops, and shows each one's own edge one hop past that.
+                "hops": ParameterDescription(
+                    type="integer",
+                    default=self.config.default_hops,
+                    minimum=1,
+                    maximum=3,
+                ),
+                # One record's inquiry id: its formation panel opens already read.
+                "claim": ParameterDescription(
+                    type="string",
+                    default="",
+                    max_length=512,
+                ),
+            },
+        )
+
+
 class FilesVisual:
     """A record's files and what changed in them, each change with its diff."""
 
@@ -352,6 +413,7 @@ class Workspace:
                     record_kinds=[],
                 ),
                 ContextGraphVisual.Config(),
+                KnowledgeVisual.Config(),
                 TimelineVisual.Config(),
                 StaticVisual.Config(
                     type="trax.artifact",
@@ -372,6 +434,14 @@ class Workspace:
                 ),
                 FilesVisual.Config(),
                 TerminalVisual.Config(),
+                StaticVisual.Config(
+                    type="trax.blocks",
+                    title="Blocks",
+                    description=(
+                        "A distilled answer: blocks of knowledge and the flow "
+                        "between them, from the prompt's records."
+                    ),
+                ),
             ],
         )
         """Configured visual modules available to a workspace."""

@@ -4,6 +4,10 @@ A placed session has exactly one ``produced_by`` edge to a workstream Issue, one
 ``station:<workspace uuid>`` label and, on a git branch, one ``git:<origin>@<branch>``
 label. A station holds many sessions; one made for a session also remembers it as
 ``StationData.session_id``, which never changes who Chat talks to.
+
+The run rules alone make those three. A science chat's run is answered by the station
+that already holds the chat, and that placement is read off it: it writes no edge, no
+label and no station.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from treekle import from_plain
 from trackinizer.server.notify import tx
 from trackinizer.server.visuals.workspace_store import new_session_station
 from trackinizer.server.visuals.workstreams import check_workstream, open_scratch
-from trackinizer.wire.wire_science_chat import CHAT_SESSION_PREFIX
+from trackinizer.wire.wire_science_chat import CHAT_SESSION_PREFIX, chat_conversation_id
 from trackinizer.wire.wire_service_accounts import is_service_address
 from trackinizer.wire.wire_sessions import (
     GIT_LABEL_PREFIX,
@@ -45,6 +49,12 @@ _WORKSTREAM_EDGES: Final = (
     "AND issue.labels @> ARRAY['workstream']::text[]"
 )
 
+_CHAT_STATION: Final = (
+    "SELECT id, station->>'workstream_id' AS workstream FROM visual_workspaces "
+    "WHERE user_id = $1 AND station->>'conversation_id' = $2"
+)
+"""The station that holds a chat, and the workstream that station was named on."""
+
 
 def git_label(git: GitRef) -> str:
     """Return the ``git:`` label of a checkout, its origin URL without credentials.
@@ -64,13 +74,15 @@ def git_label(git: GitRef) -> str:
 
 
 def is_placed(session: AgentSession) -> bool:
-    """Say whether a session is one a run places: a person's own ``trax run``.
+    """Say whether a session is one the run rules place: a person's own ``trax run``.
 
     Args:
       session: The session.
 
     Returns:
-      placed: False for a service account and a science chat.
+      placed: False for a service account, whose run has no station to answer for, and
+        for a science chat, which the rules do not place but :func:`place_session`
+        still settles onto the station that holds the chat.
 
     """
     return not (
@@ -98,8 +110,10 @@ async def place_session(
        that workstream, in a new station.
     4. The caller's Scratch workstream, in a new station.
 
-    Placing a placed session returns its placement. The labels and the edge follow
-    the station's commit, so a retry converges.
+    A science chat takes none of these rules: it is placed by :func:`_chat_placement`
+    on the station that already holds it, or left unplaced. A service account is
+    unplaced. Placing a placed session returns its placement. The labels and the edge
+    follow the station's commit, so a retry converges.
 
     Args:
       engine: Database connection source.
@@ -116,7 +130,11 @@ async def place_session(
 
     """
     if not is_placed(session):
-        return SessionPlacement()
+        return await _chat_placement(
+            engine,
+            session=session,
+            user_id=user_id,
+        )
     label = None if body.git is None else git_label(body.git)
     scratch = await open_scratch(engine, store=store, user_id=user_id, email=email)
     async with engine.acquire() as conn, tx(conn):
@@ -156,6 +174,44 @@ async def place_session(
         ],
     )
     return SessionPlacement(workstream_id=workstream_id, workspace_id=workspace_id)
+
+
+async def _chat_placement(
+    engine: DatabaseEngine,
+    *,
+    session: AgentSession,
+    user_id: uuid.UUID,
+) -> SessionPlacement:
+    """Place the run answering a science chat on the station that holds that chat.
+
+    A chat's run is the one a person's canvas waits on, so it must be able to point
+    that canvas: the station is what ``trax workspace`` acts on. It is read, never
+    made -- no station, no workstream edge and no labels come from this path, and a
+    chat no station holds (or a session that is no chat) is left unplaced. A station
+    held by another user is not this caller's to answer for, so only the owner of the
+    chat's station is placed on it.
+
+    Args:
+      engine: Database connection source.
+      session: The chat's session.
+      user_id: The caller, who must own the station.
+
+    Returns:
+      placement: The chat's station and its workstream, or both ``None``.
+
+    """
+    conversation_id = chat_conversation_id(session.cli_session_id)
+    if conversation_id is None:
+        return SessionPlacement()
+    async with engine.acquire() as conn:
+        row = await conn.fetchrow(_CHAT_STATION, user_id, str(conversation_id))
+    if row is None:
+        return SessionPlacement()
+    workstream = row["workstream"]
+    return SessionPlacement(
+        workstream_id=None if workstream is None else uuid.UUID(str(workstream)),
+        workspace_id=from_plain(row["id"], uuid.UUID),
+    )
 
 
 async def move_session(

@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { CHAT_DELETED, CHAT_FORK_CLOSED, CHAT_FORK_WIDER, CHAT_NOT_SHARED, CHAT_STAFF_ONLY, type ChatHead, type ChatPartial, type ChatPartialState, deleteChat, getChatHead,
   readChatPartial, reattachChat, sendChatLine, shareChat, unshareChat } from "../api/chats";
-import { clearChat, hideStation as restoreStation, listStations, pinStation, renameStation, stationForChat } from "../api/stations";
+import { clearChat, hideStation as restoreStation, listStations, pinStation, renameStation, stationForChat, type StationSummary } from "../api/stations";
 import { createStation as createStationInWorkstream, createWorkstream, listWorkstreams, moveStation } from "../api/workstreams";
 import { ApiError, type CallOptions } from "../api/client";
 import { findRef, getDetail } from "../api/detail";
@@ -221,9 +221,9 @@ async function type(text: string) {
 
 /** The station's chat is conversation `id` when the next `shell` renders. */
 const open = (id: string) => { opened = id; };
-/** The words of each line, without its "Fork from here" button or the name of the agent that wrote an answer. */
+/** The words of each line, without its "Fork from here" button. */
 const articles = () => screen.getAllByRole("article").map((line) => [...line.children]
-  .filter((child) => child.tagName !== "BUTTON" && !child.classList.contains("chat-line-agent"))
+  .filter((child) => child.tagName !== "BUTTON")
   .map((child) => child.textContent).join(""));
 const openMore = () => fireEvent.click(screen.getByRole("button", { name: "More chat actions" }));
 /** Open the workstream picker the way a person does: "Move to…" in the "…" menu. */
@@ -316,7 +316,7 @@ test("a successfully delivered question is recallable before its transcript arri
 
 test("scout is the partner with no pairing, and Chat is ready to send", () => {
   shell();
-  expect(within(screen.getByLabelText("Chat partner")).getByText("scout")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Chat provider: scout" })).toBeTruthy();
   expect(screen.getByText("Say something to scout.")).toBeTruthy();
   expect(screen.getByLabelText("Message")).toHaveProperty("disabled", false);
   expect(getChatHead).not.toHaveBeenCalled();
@@ -428,10 +428,12 @@ test("a Chat open over the page can be pinned beside it from the menu", () => {
   expect(screen.queryByRole("button", { name: "Pin Chat beside the page" })).toBeNull();
 });
 
-test("Chat's header names the station and offers Clear chat without History", () => {
+test("Chat's strip names the chat you are in and offers Clear chat without History", () => {
   shell();
-  const partner = screen.getByRole("group", { name: "Chat partner" });
-  expect(within(partner).getByRole("button", { name: "Scratch chat" })).toBeTruthy();
+  const chats = screen.getByRole("group", { name: "Chat sessions" });
+  expect(within(chats).getByRole("button", { name: "Scratch chat" })).toBeTruthy();
+  // The design keeps the strip for the chats alone: what the chat talks to is the hints under the box.
+  expect(within(chats).queryByRole("button", { name: /^Chat provider: / })).toBeNull();
   expect(screen.queryByRole("button", { name: "History" })).toBeNull();
   openMore();
   expect(screen.getByRole("button", { name: "Clear chat" }).getAttribute("title")).toBe("New chat, same canvas");
@@ -473,7 +475,9 @@ test("the chat title and workstream menus close each other in both directions", 
   fireEvent.click(screen.getByRole("button", { name: "Scratch chat" }));
   expect(screen.queryByRole("textbox", { name: "Workstream" })).toBeNull();
   expect(screen.getByRole("dialog", { name: "Chats" })).toBeTruthy();
-  expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Chat name" }));
+  // The dialog opens on its search, not its rename field: it is for choosing a chat, and
+  // renaming the open one is the second job it also does, below the list.
+  expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Search chats" }));
 });
 
 test("a chat name save finishing after switching menus leaves the workstream picker open", async () => {
@@ -968,13 +972,16 @@ test("a chat quiet past the idle threshold offers Close in the strip above the b
 
 test("Close shows only once the idle threshold passes, without another record arriving", async () => {
   open("c1");
-  hold("c1", stamped(said(0, ME, "just now"), IDLE_CLOSE_MS - 60));
+  // The threshold is a wall clock, so the margin below the absent check has to be time
+  // the machine can spend on a loaded run: at 60ms the strip had already arrived by the
+  // assertion when the whole suite ran in one process.
+  hold("c1", stamped(said(0, ME, "just now"), IDLE_CLOSE_MS - 900));
   vi.mocked(getChatHead).mockResolvedValue(head("c1"));
   shell(codexChat({ state: "idle" }));
   await screen.findByText("just now");
   await headLoaded();
   expect(document.querySelector(".chat-stop")).toBeNull();
-  await waitFor(() => expect(document.querySelector(".chat-stop")).not.toBeNull());
+  await waitFor(() => expect(document.querySelector(".chat-stop")).not.toBeNull(), { timeout: 3_000 });
 });
 
 test("a run mid-turn shows Stop, never Close, however long since its last record", async () => {
@@ -1024,6 +1031,11 @@ test("Delete chat forever hides the emptied station and opens the station beside
   vi.mocked(deleteChat).mockResolvedValue();
   vi.mocked(restoreStation).mockResolvedValue({ ...workspace, conversation_id: null, hidden: true });
   vi.mocked(getWorkspace).mockResolvedValue({ ...workspace, id: "w-beta", name: "beta", conversation_id: "c2" });
+  // The list the strip reads: the emptied station comes back hidden and holding no conversation, as the server says.
+  vi.mocked(listStations).mockResolvedValue([
+    { id: WORKSPACE_ID, name: "unnamed-workstream#1", conversation_id: null, page: null, hidden: true, created_at: "2026-10-01T10:00:00Z" },
+    { id: "w-beta", name: "beta", conversation_id: "c2", page: null, created_at: "2026-10-02T10:00:00Z" },
+  ] as unknown as StationSummary[]);
   const { client } = shell();
   client.setQueryData(["stations"], [
     { id: WORKSPACE_ID, name: "unnamed-workstream#1", conversation_id: "c1", page: null, created_at: "2026-10-01T10:00:00Z" },
@@ -1036,8 +1048,8 @@ test("Delete chat forever hides the emptied station and opens the station beside
   await waitFor(() => expect(currentStation().id).toBe("w-beta"));
   expect(deleteChat).toHaveBeenCalledWith("c1");
   expect(restoreStation).toHaveBeenCalledWith(WORKSPACE_ID);
-  expect(client.getQueryData<{ id: string; hidden?: boolean; conversation_id: string | null }[]>(["stations"])
-    ?.find((each) => each.id === WORKSPACE_ID)).toMatchObject({ hidden: true, conversation_id: null });
+  await waitFor(() => expect(client.getQueryData<{ id: string; hidden?: boolean; conversation_id: string | null }[]>(["stations"])
+    ?.find((each) => each.id === WORKSPACE_ID)).toMatchObject({ hidden: true, conversation_id: null }));
 });
 
 test("a share refused with chat_not_starter is said in words", async () => {
@@ -1634,20 +1646,6 @@ test("every part of the session is read, in order", async () => {
   expect(articles()).toEqual(["before the restart", "after the restart"]);
 });
 
-test("each answer shows the agent whose part wrote it, not the provider the station has now", async () => {
-  open("c1");
-  hold("c1");
-  vi.mocked(listSessionParts).mockResolvedValue([
-    { part: 0, name: "a.jsonl", format: "sagent", records: 2, metadata: {}, ir_id: "i" },
-    { part: 1, name: "b.jsonl", format: "claude", records: 1, metadata: {}, ir_id: "j" },
-  ]);
-  vi.mocked(readSessionRecords).mockImplementation(async (_id, { part }) => (part === 0 ? [said(0, ME, "a question"), answered(1, "from the assistant")] : [answered(0, "from claude")]));
-  shell({ ...workspace, provider: "codex" });
-  await screen.findByText("from claude");
-  const agentOf = (text: string) => screen.getByText(text).closest("article")!.querySelector(".chat-line-agent")?.textContent ?? null;
-  expect([agentOf("a question"), agentOf("from the assistant"), agentOf("from claude")]).toEqual([null, "scout", "claude"]);
-});
-
 const OFF_LINE = "Chat is off: the assistant is not connected.";
 const emptyPanel = () => document.querySelector(".chat-panel")!.textContent!;
 
@@ -1670,9 +1668,9 @@ test("a CLI chat with no live run says so, and asks for a machine", () => {
   expect(emptyPanel()).not.toMatch(/Chat is off: the assistant/);
 });
 
-test("a live partner shows none of the off line, and the header names it", () => {
+test("a live partner shows none of the off line, and the hints name it", () => {
   shell({ ...workspace, partner: { ...SCOUT, actor: "ada-run" } });
-  expect(within(screen.getByLabelText("Chat partner")).getByText("ada-run")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Chat provider: ada-run" })).toBeTruthy();
   expect(screen.getByText("Say something to ada-run.")).toBeTruthy();
   expect(emptyPanel()).not.toMatch(/Chat is off|helper|uv tool install/);
   expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
@@ -1690,8 +1688,6 @@ test("a record link in an answer is a plain link that only sets the address, and
   expect(sendChatLine).not.toHaveBeenCalled();
 });
 
-const LOOKED_UP = "0b6f7c1e-2f7a-4c55-9d7e-1f0e6b1d2a33";
-
 /** Move the page as the router's links do: the hash changes and the window says so. */
 function go(hash: string) {
   act(() => {
@@ -1700,13 +1696,6 @@ function go(hash: string) {
   });
 }
 
-/** Name any record id as an Experiment, and any `Kind/seq` as found. */
-function knowRecords() {
-  vi.mocked(getDetail).mockImplementation(async (id: string) => ({
-    self: { id, kind: "Experiment", seq: 407, title: `Run of ${id}` }, edges: {}, backlinks: {}, changes: [],
-  }) as never);
-  vi.mocked(findRef).mockResolvedValue("found");
-}
 
 async function sentFrom(hashes: readonly string[]) {
   history.replaceState(null, "", hashes[0]);
@@ -1734,27 +1723,6 @@ test("the trail a line carries holds at most 8 pages and never the current one",
 
 test("a page the server would refuse is sent as null, with the pages before it as the trail", async () => {
   expect(await sentFrom(["#/graph", "#/settings", "#top"])).toEqual({ page: null, trail: ["#/graph", "#/settings"] });
-});
-
-test("Chat names the record on screen and follows the page", async () => {
-  knowRecords();
-  history.replaceState(null, "", "#/activity");
-  shell();
-  const chip = () => screen.queryByLabelText("Screen context");
-  expect(chip()).toBeNull();
-
-  go(`#/lookup/${LOOKED_UP}`);
-  await waitFor(() => expect(chip()?.textContent).toBe(`On screen: Experiment#407 Run of ${LOOKED_UP}`));
-
-  go("#/ref/Experiment/407");
-  await waitFor(() => expect(chip()?.textContent).toBe("On screen: Experiment#407 Run of found"));
-  expect(findRef).toHaveBeenCalledWith("Experiment", 407, expect.anything());
-
-  go(`#/inquiry/${LOOKED_UP}`);
-  await waitFor(() => expect(chip()?.textContent).toBe(`On screen: Experiment#407 Run of ${LOOKED_UP}`));
-
-  go("#/activity");
-  expect(chip()).toBeNull();
 });
 
 test("the transcript follows the newest row, the working line included, unless the reader scrolled up", async () => {
@@ -2439,11 +2407,37 @@ test("hovering a stored line shows when it was sent, in the reader's own time; a
   expect(pending!.getAttribute("title")).toBeNull();
 });
 
-test("the header names the provider the chat talks to, with its live label and dot", () => {
+test("the hints under the box name the live partner, and its card carries the dot", () => {
   shell({ ...workspace, provider: "claude", partner: { ...SCOUT, status: "live" as const, provider: "claude", label: "claude · gx10", machine: "gx10" } });
-  const button = screen.getByRole("button", { name: "Chat provider: claude" });
+  const button = screen.getByRole("button", { name: "Chat provider: claude · gx10" });
   expect(button.textContent).toContain("claude · gx10");
-  expect(button.querySelector(".provider-dot")?.classList.contains("live")).toBe(true);
+  fireEvent.click(button);
+  const card = screen.getByRole("dialog", { name: "Chat provider card" });
+  expect(card.querySelector(".provider-dot")?.classList.contains("live")).toBe(true);
+});
+
+test("the row names one chat, the one you are in, and its siblings are in the picker it opens", async () => {
+  const rows = [
+    { id: WORKSPACE_ID, name: "unnamed-workstream#1", hidden: false, pinned: false, created_at: "2026-10-01T00:00:00Z", modified_at: "2026-10-20T00:00:00Z", state: "idle" },
+    { id: "s1", name: "earlier run", hidden: false, pinned: false, created_at: "2026-10-02T00:00:00Z", modified_at: "2026-10-19T00:00:00Z", state: "requires_action" },
+    { id: "s2", name: "quiet chat", hidden: false, pinned: false, created_at: "2026-10-03T00:00:00Z", modified_at: "2026-10-18T00:00:00Z" },
+    { id: "s3", name: "fourth chat", hidden: false, pinned: false, created_at: "2026-10-04T00:00:00Z", modified_at: "2026-10-17T00:00:00Z" },
+  ] as unknown as StationSummary[];
+  vi.mocked(listStations).mockResolvedValue(rows);
+  const { client } = shell();
+  await act(async () => { client.setQueryData(["stations"], rows); });
+  const chats = within(screen.getByRole("group", { name: "Chat sessions" }));
+  // One name on the row. A strip of three put two other chats across it before the first word of
+  // this one's conversation; the row is the chat you are in, and the chevron is the way to the rest.
+  expect(chats.getAllByRole("button").map((each) => each.getAttribute("aria-label"))).toEqual(["Scratch chat"]);
+  // And every sibling is in the picker, which is one click away and searches all of them.
+  fireEvent.click(chats.getByRole("button", { name: "Scratch chat" }));
+  const picker = within(await screen.findByRole("list", { name: "Chats in this workstream" }));
+  await picker.findByRole("button", { name: "earlier run" });
+  expect(picker.getAllByRole("button").filter((each) => each.classList.contains("station-option"))
+    .map((each) => each.textContent)).toEqual(["Scratch chat", "earlier run", "quiet chat", "fourth chat"]);
+  await act(async () => { picker.getByRole("button", { name: "quiet chat" }).click(); });
+  expect(vi.mocked(getWorkspace).mock.calls.some(([id]) => id === "s2")).toBe(true);
 });
 
 test("+ New chat offers the three providers, the default first and starred, and a grayed one does nothing", async () => {
@@ -2475,16 +2469,17 @@ test("a server with no assistant offers no assistant in + New chat", async () =>
 // Tool calls between the lines: the same conversation as each provider records it,
 // with the Settings switch off and on.
 const stampedAt = (at: SessionRecord, minute: number): SessionRecord => ({ ...at, timestamp: `2026-10-21T10:0${minute}:00Z` }) as SessionRecord;
-const TOOL_TALKS: readonly (readonly [string, readonly SessionRecord[]])[] = [
-  ["sagent", [said(0, ME, "list the home directory"),
+// The tool name each provider records its shell call under: the row prints the record's own.
+const TOOL_TALKS: readonly (readonly [string, string, readonly SessionRecord[]])[] = [
+  ["sagent", "Bash", [said(0, ME, "list the home directory"),
     record(1, "ToolCall", { call_id: "kb1", name: "Bash", arguments: { command: "ls ~" } }),
     record(2, "ShellCommandResult", { call_id: "kb1", command: ["ls ~"], stdout: "notes\nsrc\n", extra: { is_error: false } }),
     answered(3, "Two entries.")]],
-  ["claude", [record(0, "UserMessage", { content: "list the home directory", extra: { author: ME } }),
+  ["claude", "Bash", [record(0, "UserMessage", { content: "list the home directory", extra: { author: ME } }),
     record(1, "ToolCall", { call_id: "toolu_1", name: "Bash", arguments: { command: "ls ~", description: "List home" } }),
     record(2, "ShellCommandResult", { call_id: "toolu_1", command: ["ls ~"], stdout: "notes\nsrc\n", stderr: "", exit_code: 0 }),
     answered(3, "Two entries.")]],
-  ["codex", [record(0, "UserMessage", { content: "list the home directory", extra: { author: ME } }),
+  ["codex", "shell", [record(0, "UserMessage", { content: "list the home directory", extra: { author: ME } }),
     record(1, "ToolCall", { call_id: "call_1", name: "shell", arguments: { command: ["bash", "-lc", "ls ~"], workdir: "/home/ada" } }),
     record(2, "ShellCommandResult", { call_id: "call_1", command: ["bash", "-lc", "ls ~"], stdout: "notes\nsrc\n", stderr: "", exit_code: 0 }),
     answered(3, "Two entries.")]],
@@ -2492,38 +2487,35 @@ const TOOL_TALKS: readonly (readonly [string, readonly SessionRecord[]])[] = [
 const cardsOn = () => act(() => receivePreferences({ ...preferences(), chat_tool_calls: true }));
 const kindsShown = () => [...document.querySelectorAll(".chat-lines > article")].map((line) => /chat-line-(user|assistant|tool)\b/.exec(line.className)?.[1]);
 
-test.each(TOOL_TALKS)("with the switch off, a %s conversation shows its lines and no tool card", async (_provider, records) => {
+test.each(TOOL_TALKS)("with the switch off, a %s conversation shows its lines and no call row for its %s", async (_provider, _tool, records) => {
   open("c1");
   hold("c1", ...records);
   shell();
   await screen.findByText("Two entries.");
   expect(articles()).toEqual(["list the home directory", "Two entries."]);
   expect(document.querySelector(".chat-line-tool")).toBeNull();
-  expect(screen.queryByText("Ran")).toBeNull();
 });
 
-test.each(TOOL_TALKS)("with the switch on, a %s conversation shows its call as a card between the lines, opening to its output", async (_provider, records) => {
+test.each(TOOL_TALKS)("with the switch on, a %s conversation shows its own %s call as a row between the lines, its output under it", async (_provider, tool, records) => {
   cardsOn();
   open("c1");
   hold("c1", ...records.map((record, minute) => stampedAt(record, minute)));
   shell();
   await screen.findByText("Two entries.");
   expect(kindsShown()).toEqual(["user", "tool", "assistant"]);
-  const card = document.querySelector<HTMLElement>(".chat-line-tool")!;
-  expect(card.querySelector(".tool-row .name")!.textContent).toBe("Ran");
-  expect(card.querySelector(".tool-arg")!.textContent).toBe("ls ~");
-  expect(card.querySelector(".chat-tool-state")!.textContent).toBe("done");
-  expect(card.querySelector(".tool-out")).toBeNull();
-  fireEvent.click(card.querySelector("summary")!);
-  await waitFor(() => expect(card.querySelector(".tool-out")!.textContent).toBe("notes\nsrc\n"));
-  // A card is no message: it has no fork button, and the working line does not stand
+  const row = document.querySelector<HTMLElement>(".chat-line-tool")!;
+  expect(row.querySelector(".verb")!.textContent).toBe(tool);
+  expect(row.querySelector(".arg")!.textContent).toBe("ls ~");
+  expect(row.querySelector(".t")!.textContent).toBe("60.00 s");
+  expect(row.querySelector(".out")!.textContent).toContain("notes\nsrc");
+  // A row is no message: it has no fork button, and the working line does not stand
   // for it.
-  expect(within(card).queryByRole("button", { name: "Fork from here" })).toBeNull();
+  expect(within(row).queryByRole("button", { name: "Fork from here" })).toBeNull();
 });
 
-test("turning the switch on shows the cards of the conversation open, and turning it off takes them away", async () => {
+test("turning the switch on shows the call row of the conversation open, and turning it off takes it away", async () => {
   open("c1");
-  hold("c1", ...TOOL_TALKS[1]![1]);
+  hold("c1", ...TOOL_TALKS[1]![2]);
   shell();
   await screen.findByText("Two entries.");
   expect(document.querySelector(".chat-line-tool")).toBeNull();
@@ -2533,7 +2525,7 @@ test("turning the switch on shows the cards of the conversation open, and turnin
   expect(document.querySelector(".chat-line-tool")).toBeNull();
 });
 
-test("a call still running shows as a running card, and a failed one as failed with its error open", async () => {
+test("a call still running shows as a running row, and a failed one as failed with its error under it", async () => {
   cardsOn();
   open("c1");
   hold("c1", said(0, ME, "run both"),
@@ -2543,9 +2535,11 @@ test("a call still running shows as a running card, and a failed one as failed w
   shell();
   await waitFor(() => expect(document.querySelectorAll(".chat-line-tool")).toHaveLength(2));
   const [running, failed] = [...document.querySelectorAll<HTMLElement>(".chat-line-tool")];
-  expect(running!.querySelector(".chat-tool-state")!.textContent).toBe("running");
-  expect(failed!.querySelector(".chat-tool-state")!.textContent).toBe("failed");
-  expect(failed!.querySelector(".tool-out")!.textContent).toBe("no such directory\n");
+  expect(running!.querySelector(".t")!.textContent).toBe("running");
+  expect(running!.querySelector(".out")).toBeNull();
+  expect(failed!.querySelector(".t")!.textContent).toBe("exit 2");
+  expect(failed!.querySelector(".t")!.className).toContain("failed");
+  expect(failed!.querySelector(".out")!.textContent).toBe("└no such directory\n");
   // The agent is still working on the running call: its name stays on the working line.
   expect(screen.getByText("Working: Bash…")).toBeTruthy();
 });

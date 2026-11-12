@@ -15,11 +15,13 @@ export type RendererProps = {
 type Renderer = { readonly version: number; readonly Component: ComponentType<RendererProps> };
 
 const ContextGraph = lazyView(() => import("./ContextGraph"), (module) => module.ContextGraph);
+const Knowledge = lazyView(() => import("./Knowledge"), (module) => module.Knowledge);
 const Timeline = lazyView(() => import("./Timeline"), (module) => module.Timeline);
 const Artifact = lazyView(() => import("./Artifact"), (module) => module.Artifact);
 const Summary = lazyView(() => import("./Summary"), (module) => module.Summary);
 const Files = lazyView(() => import("./Files"), (module) => module.Files);
 const Terminal = lazyView(() => import("./Terminal"), (module) => module.TerminalTile);
+const Blocks = lazyView(() => import("../blocks"), (module) => module.BlocksVisual) as LazyView<RendererProps>;
 /**
  * Renderers for visuals an addon's deployment adds to the catalog. They stay out
  * of renderer-versions.json, which mirrors the default catalog every server has.
@@ -39,7 +41,7 @@ const ADDON_VIEWS: readonly LazyView<RendererProps>[] = [
  * stay out of the first load.
  */
 export function preloadRenderers(): void {
-  for (const view of [ContextGraph, Timeline, Artifact, Summary, Files, DetailView, ...ADDON_VIEWS]) void view.preload().catch(() => {});
+  for (const view of [ContextGraph, Knowledge, Timeline, Artifact, Summary, Files, DetailView, ...ADDON_VIEWS]) void view.preload().catch(() => {});
 }
 
 /** Frontend counterparts of the backend's inert visual descriptions. */
@@ -47,11 +49,13 @@ export const RENDERERS: Readonly<Record<string, Renderer>> = {
   ...ADDON_RENDERERS,
   "trax.browse": { version: rendererVersions["trax.browse"], Component: ({ children }) => <>{children}</> },
   "trax.subgraph": { version: rendererVersions["trax.subgraph"], Component: ContextGraph },
+  "trax.knowledge": { version: rendererVersions["trax.knowledge"], Component: Knowledge },
   "trax.timeline": { version: rendererVersions["trax.timeline"], Component: Timeline },
   "trax.artifact": { version: rendererVersions["trax.artifact"], Component: Artifact },
   "trax.summary": { version: rendererVersions["trax.summary"], Component: Summary },
   "trax.files": { version: rendererVersions["trax.files"], Component: Files },
   "trax.terminal": { version: rendererVersions["trax.terminal"], Component: Terminal },
+  "trax.blocks": { version: rendererVersions["trax.blocks"], Component: Blocks },
 } satisfies Record<keyof typeof rendererVersions, Renderer>;
 
 /** A missing or newer renderer fails within its tile, never the entire canvas. */

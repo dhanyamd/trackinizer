@@ -139,14 +139,16 @@ test("Settings opens as a sheet over the page, which stays in its canvas under i
   expect(screen.getByRole("region", { name: "Canvas" })).toBe(canvas);
 });
 
-test("the top bar holds the logo, Go, Search, New, its pin, Machines and the account in order; with no canvas or workstreams", async () => {
+test("the top bar holds the logo, Go and New, then the search in the middle of the bar, then Machines and the account; with no canvas or workstreams", async () => {
   serve(false);
   render(<App assign={vi.fn()} />);
   await screen.findByRole("heading", { level: 1 });
   const bar = screen.getByRole("banner", { name: "App" });
   const named = [...bar.querySelectorAll<HTMLElement>("a, button")].filter((each) => !each.closest("[hidden]"))
     .map((each) => each.getAttribute("aria-label"));
-  expect(named).toEqual(["Trackinizer, the graph", "Go to", "Search", "New issue", "Unpin app bar", "Machines", "Account: ada@example.com, writer"]);
+  // The order is the bar's own: the left cluster, the search over the middle of the window,
+  // the tail. Tab follows what a reader's eye does, so a change here is a change to the design.
+  expect(named).toEqual(["Trackinizer, the graph", "Go to", "New issue", "Search", "Machines", "Account: ada@example.com, writer"]);
   expect(within(bar).queryByRole("navigation", { name: "Workstreams" })).toBeNull();
   expect(document.querySelector(".app")!.classList).not.toContain("with-canvas");
 });

@@ -872,28 +872,24 @@ def initial_data(
     *,
     provider: ChatProvider = "assistant",
 ) -> WorkspaceData:
-    """Start a new canvas with the default visual.
+    """Start a new canvas empty: the black stage, nothing on it.
+
+    The redesign's rule — the canvas is a black ground by default, and a
+    visual appears only when someone asks for one. A `show` operation puts
+    the fold, the subgraph or the page on it; nothing opens by itself.
 
     Args:
-      catalog: Trusted visual definitions and initial selection.
+      catalog: Trusted visual definitions; read only for the record kinds
+        the callers' shows will validate against.
       provider: Who answers its Chat.
 
     Returns:
-      state: Initial canvas data.
+      state: Initial canvas data, no visuals.
 
     """
-    default = next(
-        visual for visual in catalog.visuals if visual.type == catalog.default_visual
-    )
+    del catalog
     return WorkspaceData(
-        visuals=[
-            VisualInstance(
-                id=uuid.uuid4(),
-                type=default.type,
-                version=default.version,
-                placement="main",
-            ),
-        ],
+        visuals=[],
         provider=provider,
     )
 
@@ -1136,6 +1132,7 @@ def apply_operation(
             type=descriptor.type,
             version=descriptor.version,
             placement=operation.placement
+            or descriptor.default_placement
             or ("main" if descriptor.default_size == "wide" else "side"),
             record_id=operation.record_id,
             params=params,

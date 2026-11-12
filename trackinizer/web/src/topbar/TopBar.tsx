@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { APP } from "../appName";
 import { usePalette } from "../commands/palette";
 import { keyCaps } from "../commands/registry";
@@ -11,75 +11,48 @@ import { GoMenu } from "./GoMenu";
 import { MachinesMenu } from "./MachinesMenu";
 import { WorkstreamBar } from "./WorkstreamBar";
 import { useDismiss } from "./useDismiss";
-import { useHoverOpen } from "../visuals/hoverOpen";
 import "./topbar.css";
-
-/** The `localStorage` key of whether this browser keeps the bar open. */
-const PINNED_KEY = "trackinizer.topbar.pinned";
-
-function readPinned(): boolean {
-  try {
-    return localStorage.getItem(PINNED_KEY) !== "0";
-  } catch {
-    return true;
-  }
-}
-
-function writePinned(pinned: boolean) {
-  try {
-    localStorage.setItem(PINNED_KEY, pinned ? "1" : "0");
-  } catch {
-    // Storage blocked: the choice lasts for this page only.
-  }
-}
 
 /**
  * The app's one bar, along the top: the logo (home, the graph), Go (the pages),
- * Search, New, the pin, then the user's workstreams, Machines (where commands
- * run), the Workbench's visuals while a canvas is mounted, and the account at
- * the end.
+ * Search, New, then the user's workstreams, Machines (where commands run), the
+ * Workbench's visuals while a canvas is mounted, and the account at the end.
+ *
+ * The bar is always there. It used to hide itself when the pointer left it, and
+ * a pin in the bar turned that off — but the design pass that removed the pin
+ * left the hiding behind, and the choice persisted in `localStorage`. A browser
+ * that had ever unpinned it came back to a bar that hid with no control left to
+ * bring it back: the page opened under an 8px handle. One bar that stays put is
+ * what the rest of the layout already assumes, so there is no state to keep.
  */
 export function TopBar({ stations }: { readonly stations: boolean }) {
   const palette = usePalette();
   const [goOpen, setGoOpen] = useState(false);
-  const [pinned, setPinned] = useState(readPinned);
-  const header = useRef<HTMLElement>(null);
-  const peek = useHoverOpen(header);
-  const shown = pinned || peek.open;
   const closeGo = useCallback(() => setGoOpen(false), []);
-  useEffect(() => {
-    const outside = (event: PointerEvent) => {
-      if (typeof window.matchMedia === "function" && window.matchMedia("(hover: none)").matches && event.target instanceof Element
-        && !event.target.closest(".topbar, .topbar-edge")) peek.set(false);
-    };
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
-  }, [peek.set]);
   return (
-    <>
-    <button type="button" className="topbar-edge" aria-label="Open app bar" hidden={shown}
-      onPointerMove={peek.handlers.onPointerMove} onPointerLeave={peek.handlers.onPointerLeave} onClick={() => peek.set(true)} />
-    <header ref={header} className={`topbar${shown ? " topbar-auto-open" : " topbar-auto-hidden"}`} aria-label="App"
-      onPointerMove={peek.handlers.onPointerMove} onPointerLeave={peek.handlers.onPointerLeave} onBlurCapture={peek.handlers.onBlur}>
-      <a className="topbar-logo" href={formatRoute({ name: "graph" })} aria-label={`${APP.name}, the graph`} title={APP.name}>
-        <Logo />
-      </a>
-      <GoMenu open={goOpen} onOpen={setGoOpen} />
-      <button type="button" className="icon-btn" onClick={() => palette.show()} aria-label="Search"
+    <header className="topbar" aria-label="App">
+      <span className="topbar-left">
+        <a className="topbar-logo" href={formatRoute({ name: "graph" })} aria-label={`${APP.name}, the graph`} title={APP.name}>
+          <Logo />
+        </a>
+        <span className="topbar-name">{APP.name}</span>
+        <span className="topbar-slash" aria-hidden="true">/</span>
+        <GoMenu open={goOpen} onOpen={setGoOpen} />
+        <ComposeButton onNavigate={closeGo} />
+        <div className="topbar-stations">{stations && <WorkstreamBar />}</div>
+      </span>
+      <button type="button" className="topbar-search" onClick={() => palette.show()} aria-label="Search"
         title={`Search and commands (${keyCaps("$mod+k").join(" ")})`}>
-        <Icon name="search" />
+        <Icon name="search" size={13} />
+        <span className="label">Search this research</span>
+        <kbd>{keyCaps("$mod+k").join(" ")}</kbd>
       </button>
-      <ComposeButton onNavigate={closeGo} />
-      <span className="topbar-rule" aria-hidden="true" />
-      <button type="button" className="icon-btn topbar-pin" aria-label={pinned ? "Unpin app bar" : "Keep app bar open"}
-        title={pinned ? "Unpin app bar" : "Keep app bar open"} aria-pressed={pinned}
-        onClick={() => { writePinned(!pinned); setPinned(!pinned); }}><span aria-hidden="true">📌</span></button>
-      <div className="topbar-stations">{stations && <WorkstreamBar />}</div>
-      <MachinesMenu shown={shown} />
-      <WorkbenchMenu />
-      <AccountMenu onNavigate={closeGo} />
+      <span className="topbar-tail">
+        <MachinesMenu shown />
+        <WorkbenchMenu />
+        <AccountMenu onNavigate={closeGo} />
+      </span>
     </header>
-    </>
   );
 }
 

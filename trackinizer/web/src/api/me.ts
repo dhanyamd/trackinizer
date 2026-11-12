@@ -20,6 +20,7 @@ export type Profile = {
   name: string;
   role: string;
   last_login: string | null;
+  /** The canvas and Chat column, on by default; absent from a server older than it, filled by `getProfile`. */
   visual_workspace_enabled: boolean;
   /**
    * The user's preferences, every key, defaults filled (`src/preferences.ts`);
@@ -79,11 +80,18 @@ export type CreateTokenBody = components["schemas"]["CreateTokenBody"];
 
 /** Fetch the caller's profile. Nobody signed in is an `ApiError` with status 401. */
 export async function getProfile({ signal }: CallOptions = {}): Promise<Profile> {
-  const profile = await send(TIMEOUT_MS.read, signal, (signal) =>
+  const profile = (await send(TIMEOUT_MS.read, signal, (signal) =>
     client.GET("/api/me/profile", { signal }),
-  );
-  return profile as Profile;
+  )) as RawProfile;
+  // On unless the server says off: a server older than the column answers without the key, and
+  // an absent field is not a person's refusal — it hid the whole canvas, chat and all, in silence.
+  return { ...profile, visual_workspace_enabled: profile.visual_workspace_enabled !== false };
 }
+
+/** The answer as it arrives: every key `Profile` holds, except the canvas opt-in a server older than it omits. */
+type RawProfile = Omit<Profile, "visual_workspace_enabled"> & {
+  readonly visual_workspace_enabled?: boolean;
+};
 
 /**
  * Record that the caller agreed to the alpha rules as they stand now.
