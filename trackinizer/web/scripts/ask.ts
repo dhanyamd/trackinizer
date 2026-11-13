@@ -14,7 +14,7 @@
 //   node scripts/ask.ts "why did we make CodeChange#143?"
 //   node scripts/ask.ts "experiment 344 — why does cosine's lead grow?"
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -168,8 +168,24 @@ if (question === "") {
 const docs = brief();
 const prompt = `${context()}\n\n${docs}\n\n[THE RESEARCHER ASKED]\n\n${question}\n`;
 
+/**
+ * The thinking budget, which is what this loop's latency actually is.
+ *
+ * Measured on a question with nothing to run — no page to build, no computation, no graph
+ * read, permissions bypassed so nothing blocked: 843s wall, 133,121 output tokens, of
+ * which ~8,600 were the tool calls and prose and the other ~124,500 were thinking. Input
+ * was 59 tokens; the whole 110KB brief came from cache. So the wait is not fetching, not
+ * context, and not the brief — it is the model thinking fifteen times more than it writes,
+ * and output is generated serially.
+ *
+ * A composition needs a plan, not a treatise. `ASK_THINKING` raises it back for a question
+ * that earns it; `0` turns extended thinking off entirely.
+ */
+const THINKING = process.env.ASK_THINKING ?? "8000";
+
 process.stderr.write(
-  `[ask] ${question}\n[ask] graph ${GRAPH}\n[ask] brief ${DOCS.join(" + ")} inlined, ${docs.length} chars\n`,
+  `[ask] ${question}\n[ask] graph ${GRAPH}\n[ask] brief ${DOCS.join(" + ")} inlined, ${docs.length} chars`
+  + `\n[ask] thinking budget ${THINKING}\n`,
 );
 const started = Date.now();
 
@@ -189,8 +205,34 @@ const started = Date.now();
 // A second checkout is a local arrangement, not the shape of the product: name it with
 // `ASK_ADD_DIR` where one exists, and the run is scoped to this repo alone where it does
 // not. A default pointing at a sibling directory works on one machine and nowhere else.
+/**
+ * ASK_FAST=1 — one call, no tools, no loop.
+ *
+ * The loop's cost is turns, not context: measured on a question with nothing to run, 31
+ * turns and 133k output tokens for a 17KB answer, 843s wall. Capping thinking took that
+ * to 461s and no further — because the remaining time is the agentic cycle itself,
+ * generate → run → read → generate, which is serial by construction.
+ *
+ * A question that needs no tool does not need that cycle. Here the agent gets the brief
+ * and the question, has no tools to call, and emits the composition as its reply, which
+ * this file writes. No bash, no verifier, no re-reading its own output. What it gives up
+ * is real and is the whole trade: nothing is measured, nothing is looked up in the graph,
+ * and nobody looks at the render before the reader does. For "what does the store say"
+ * or "run this and show me", take the loop.
+ */
+const fast = process.env.ASK_FAST === "1";
+
 const extra = process.env.ASK_ADD_DIR;
-const claudeArgs = [
+const claudeArgs = fast ? [
+  "--print",
+  // No `--allowedTools`: with none granted the model answers from the brief and the
+  // question alone, which is the point — a tool call here would be a turn, and turns are
+  // the thing being removed.
+  "--permission-mode", "default",
+  `${prompt}\n\nThere are no tools on this run. Reply with the composition JSON and nothing\n`
+  + "else: no preamble, no fences, no commentary. It is written to disk exactly as you\n"
+  + "send it, so anything that is not JSON breaks the page.\n",
+] : [
   "--print",
   "--add-dir", repo,
   ...(extra ? ["--add-dir", extra] : []),
@@ -208,16 +250,35 @@ const [bin, args] = direct
   ? ["claude", claudeArgs]
   : [TRAX, ["run", "--as", process.env.ASK_ACTOR ?? "Canvas", "claude", "--", ...claudeArgs]];
 
+
 const child = spawn(bin, args, {
-  stdio: ["ignore", "inherit", "inherit"],
+  // In fast mode the reply IS the answer, so stdout is captured and written here; in the
+  // loop the agent writes the file itself and stdout is its running commentary.
+  stdio: ["ignore", fast ? "pipe" : "inherit", "inherit"],
   cwd: web,
   // The wrapper syncs the session to SESSION; the agent's own graph calls name GRAPH
   // explicitly in the context above, so the two never fight over one variable.
-  env: { ...process.env, TRACKINIZER_URL: direct ? GRAPH : SESSION },
+  env: { ...process.env, TRACKINIZER_URL: direct ? GRAPH : SESSION, MAX_THINKING_TOKENS: THINKING },
 });
+
+let reply = "";
+child.stdout?.on("data", (chunk: Buffer) => { reply += chunk.toString(); });
 
 child.on("exit", (code) => {
   const took = ((Date.now() - started) / 1000).toFixed(1);
+  if (fast && code === 0) {
+    // A model told to send only JSON still sometimes wraps it in a fence, so the brace
+    // span is taken rather than trusted. Parsed before writing: a half-written answer on
+    // disk is a broken page, and the error belongs here where it can be read.
+    const body = reply.slice(reply.indexOf("{"), reply.lastIndexOf("}") + 1);
+    try {
+      writeFileSync(OUT, JSON.stringify(JSON.parse(body)));
+    } catch (error) {
+      process.stderr.write(`[ask] the reply was not a composition: ${String(error)}\n`);
+      process.stderr.write(reply.slice(0, 400) + "\n");
+      process.exit(3);
+    }
+  }
   process.stderr.write(`\n[ask] ${code === 0 ? "composed" : `failed (${code})`} in ${took}s → ${OUT}\n`);
   process.exit(code ?? 1);
 });

@@ -38,7 +38,8 @@ export type Asked = { readonly about: Pointed; readonly question: string };
  */
 export function Askable({ children, onAsk }: {
   readonly children: React.ReactNode;
-  readonly onAsk: (asked: Asked) => void;
+  /** Answer in place by returning the reply; return nothing to leave it to the store. */
+  readonly onAsk: (asked: Asked) => void | Promise<string>;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [pointed, setPointed] = useState<Pointed | null>(null);
@@ -76,22 +77,36 @@ export function Askable({ children, onAsk }: {
     return () => window.removeEventListener("keydown", key);
   }, []);
 
-  const [exchange, setExchange] = useState<{ q: string; a: string | null; id: number } | null>(null);
-  // the question lands in the session store; the answering side writes the reply
-  // back under the same id, and the bar renders it the moment it appears.
+  const [exchange, setExchange] = useState<{ q: string; a: string | null; id: number; live: boolean } | null>(null);
+  // Two ways an answer arrives. `onAsk` may return the reply, which is the live path —
+  // the caller owns the channel, so the bar does not need to know there is a chat behind
+  // it. Where it returns nothing the question lands in the session store under `id` and
+  // the bar polls for a reply written back beside it, which is how a surface with no
+  // channel of its own still answers.
   const send = () => {
     if (!pointed || question.trim() === "") return;
     const q = question.trim();
     const id = Date.now();
-    onAsk({ about: pointed, question: q });
-    try {
-      localStorage.setItem(`blocks:ask:${id}:q`, JSON.stringify({ q, node: pointed.node, item: pointed.item }));
-    } catch { /* a blocked store loses this one exchange, not the bar */ }
-    setExchange({ q, a: null, id });
+    const answering = onAsk({ about: pointed, question: q });
+    const live = typeof answering?.then === "function";
+    if (!live) {
+      try {
+        localStorage.setItem(`blocks:ask:${id}:q`, JSON.stringify({ q, node: pointed.node, item: pointed.item }));
+      } catch { /* a blocked store loses this one exchange, not the bar */ }
+    }
+    setExchange({ q, a: null, id, live });
     setQuestion("");
+    if (live) {
+      void answering.then(
+        // Only the exchange still on screen takes the answer: a reader who asked again
+        // while this was in flight is owed the reply to the question they can see.
+        (text) => setExchange((now) => (now && now.id === id ? { ...now, a: text } : now)),
+        (error: Error) => setExchange((now) => (now && now.id === id ? { ...now, a: `Not answered: ${error.message}.` } : now)),
+      );
+    }
   };
   useEffect(() => {
-    if (!exchange || exchange.a !== null) return;
+    if (!exchange || exchange.a !== null || exchange.live) return;
     const poll = setInterval(() => {
       const a = localStorage.getItem(`blocks:ask:${exchange.id}:a`);
       if (a === null) return;

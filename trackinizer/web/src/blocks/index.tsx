@@ -21,6 +21,9 @@ import "../visuals/Knowledge.css";
 import "./fit.css";
 import { setChatHidden } from "../visuals/chatColumnState";
 import { getGraph } from "../api/graph";
+import { getWorkspace } from "../api/workspaces";
+import { useCurrentStation } from "../stations/store";
+import { askTheChat } from "./askChat";
 import { distillFlow } from "./distill";
 import { loadSessionFiles, registerSessionFiles, type SessionFile } from "./sessionFiles";
 import { CodeView } from "../ui/code";
@@ -150,6 +153,32 @@ function FocusFlow({ focus, hops }: { readonly focus: string; readonly hops: 1 |
   );
 }
 
+/**
+ * The ask bar's answering side: a question about a node goes to the station's own chat
+ * and the reply comes back to the bar, under the question, where it was asked.
+ *
+ * The station is read when the question is asked rather than subscribed to, because the
+ * bar is idle almost all the time and a canvas does not need to re-render when a chat it
+ * is not using changes. A station with no conversation yet starts one, which is the same
+ * thread the chat column then shows — the canvas never opens a second channel.
+ */
+function useCanvasAsk(): (asked: Asked) => void | Promise<string> {
+  const station = useCurrentStation();
+  return useCallback(async (asked: Asked) => {
+    if (!station.id) throw new Error("this tab is not on a station yet");
+    const workspace = await getWorkspace(station.id);
+    const page = typeof location !== "undefined" && location.hash.startsWith("#/") ? location.hash : null;
+    // The node's own composed JSON rides along: the agent answers from the item it drew,
+    // which is the whole reason this beats sending a screenshot.
+    const about = JSON.stringify(asked.about.item ?? null);
+    const reply = await askTheChat(
+      { workspaceId: station.id, conversationId: workspace.conversation_id ?? null, page },
+      `${asked.question}\n\n[asked about the ${asked.about.node} on the canvas]\n${about.slice(0, 4000)}`,
+    );
+    return reply.text;
+  }, [station.id]);
+}
+
 export function BlocksView() {
   const focusMatch = typeof location !== "undefined"
     ? location.hash.match(/^#\/blocks\?focus=([^&]+)(?:&hops=([123]))?/)
@@ -158,6 +187,7 @@ export function BlocksView() {
   (window as unknown as { __blocksDebug?: unknown }).__blocksDebug = { hash: typeof location !== "undefined" ? location.hash : "", focus, matched: !!focusMatch };
   const hops = (focusMatch && focusMatch[2] ? Number(focusMatch[2]) : 2) as 1 | 2 | 3;
   const [state, setState] = useState<{ readonly flow?: KnowledgeFlow; readonly error?: string }>({});
+  const askOnCanvas = useCanvasAsk();
   useEffect(() => {
     if (focus) return;
     let live = true;
@@ -230,11 +260,7 @@ export function BlocksView() {
       {strip}
       <section className="knowledge" aria-label="What we know">
         <div className="knowledge-body">
-          <Askable onAsk={(asked: Asked) => {
-            // eslint-disable-next-line no-console
-            console.log("[ask]", asked.question, "about", asked.about.node, asked.about.item);
-            window.dispatchEvent(new CustomEvent("trackinizer:chat-ask", { detail: asked.question }));
-          }}>
+          <Askable onAsk={askOnCanvas}>
             <ComposedView flow={state.flow} />
           </Askable>
         </div>
