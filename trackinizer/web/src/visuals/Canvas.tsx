@@ -130,11 +130,9 @@ export function Canvas({ children }: { readonly children: ReactNode }) {
    */
   const [onPage, setOnPage] = useState(false);
 
-  // Going to a page shows it. The rail's four places are routes, so a click there has to
-  // put the page on the stage itself: with the toggle alone, Graph changed the address
-  // under a composition that kept the stage and nothing on screen moved — the reader
-  // clicked Graph and got no graph. Only an actual change counts, so the station still
-  // opens on whatever it last showed, and a sheet laid over the page is not a move.
+  // Going to a page shows it: the rail's places are routes, and with the toggle alone a
+  // click there changed the address under a composition that kept the stage. Only an
+  // actual change counts, so a station still opens on whatever it last showed.
   const paged = movesThePage(hash);
   const cameFrom = useRef(hash);
   useEffect(() => {
@@ -148,9 +146,8 @@ export function Canvas({ children }: { readonly children: ReactNode }) {
     }
   }, [hash, paged]);
 
-  // A visual just put up takes the stage back. An answer the agent composes while the
-  // reader is on Graph would otherwise land behind the page and never be seen, and the
-  // ask bar's reply is exactly that: a new instance appearing on the station.
+  // A visual just put up takes the stage back: an answer composed while the reader is on
+  // Graph would otherwise land behind the page and never be seen.
   const standing = visible.filter((visual) => visual.type !== PAGE).map((visual) => visual.id);
   const standingKey = standing.join(" ");
   const stood = useRef<readonly string[]>(standing);

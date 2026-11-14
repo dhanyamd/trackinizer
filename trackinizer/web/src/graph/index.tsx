@@ -133,12 +133,10 @@ export function GraphView({ createRenderer = forceGraphRenderer }: { createRende
   /**
    * Opened on a focus the loaded graph does not hold, reach once for the next size up.
    *
-   * The view draws the newest `limit` records, and a focus lights within them. On a store
-   * of a few thousand rows the record someone has just been reading about is usually not
-   * among the newest thousand, so the link they followed landed on `Belief#131 is not
-   * among the nodes loaded` — true, and useless: the record was one size setting away the
-   * whole time. One step only, never past the size the view draws without asking, and
-   * once per focus, so a record that really is absent settles on the honest answer.
+   * A focus lights within the newest `limit` records, and on a store of thousands the
+   * record just read about is rarely among the newest thousand — so the link landed on
+   * "not among the nodes loaded" while the row was one size setting away. One step, once
+   * per focus, so a record that really is absent settles on the honest answer.
    */
   const widened = useRef<string | null>(null);
   useEffect(() => {

@@ -30,12 +30,9 @@ export const RELAY_MARK = "→ ";
 export const CANVAS_ASK = "[canvas";
 
 /**
- * The mark as the canvas wrote it before the id existed, which sat at the END of the
- * question instead of its start: `why is this arm unpriced?\n\n[asked about the figure
- * on the canvas]`. Questions asked then are in the thread for good — a chat line cannot
- * be taken back, and clearing the thread to be rid of a dozen of them would take the
- * conversation with it. They carry a mark all the same, so the column reads both and
- * those questions leave the thread the way today's do.
+ * The mark as the canvas wrote it before the id existed, at the END of the question
+ * rather than its start. A chat line cannot be taken back, so the column reads both
+ * spellings and those questions leave the thread the way today's do.
  */
 const CANVAS_ASK_WAS = /^\[asked about the \S+ on the canvas\]$/m;
 

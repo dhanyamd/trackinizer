@@ -40,9 +40,8 @@ export function Rail() {
         const lit = isChat
           ? route.name === "blocks" || (!hidden && route.name !== "graph" && route.name !== "console" && route.name !== "list")
           : matches(route, place.to);
-        // Graph opens lit on what the canvas is about, when it is about a row. A focus
-        // lights and does not filter, so this takes nothing away from the bare view it
-        // replaces — it saves finding one record among thousands by eye.
+        // Graph opens lit on what the canvas is about. A focus lights and does not
+        // filter, so this takes nothing away from the bare view it replaces.
         const to = place.onTopic && topic ? { name: "graph", focus: { ref: topic, hops: 2 } } as const : place.to;
         return (
           <button key={place.name} type="button" className={lit ? "on" : undefined} aria-current={lit ? "page" : undefined}
