@@ -29,6 +29,16 @@ export const RELAY_MARK = "→ ";
  */
 export const CANVAS_ASK = "[canvas";
 
+/**
+ * The mark as the canvas wrote it before the id existed, which sat at the END of the
+ * question instead of its start: `why is this arm unpriced?\n\n[asked about the figure
+ * on the canvas]`. Questions asked then are in the thread for good — a chat line cannot
+ * be taken back, and clearing the thread to be rid of a dozen of them would take the
+ * conversation with it. They carry a mark all the same, so the column reads both and
+ * those questions leave the thread the way today's do.
+ */
+const CANVAS_ASK_WAS = /^\[asked about the \S+ on the canvas\]$/m;
+
 /** One question of a prompt, as AskUserQuestion asks it. */
 export type PromptQuestion = {
   readonly question: string;
@@ -680,7 +690,7 @@ function askedOnCanvas(words: string): boolean {
   // The PERSON's words, not the raw record: a line the bot delivered is stored under a
   // `[room] sender: ` prefix that `personOf` strips, and the mark is only at the start
   // once it is gone. Reading the record raw let every delivered question through.
-  return words.startsWith(CANVAS_ASK);
+  return words.startsWith(CANVAS_ASK) || CANVAS_ASK_WAS.test(words);
 }
 
 /** A JSON object's fields, or none when the value is not an object. */

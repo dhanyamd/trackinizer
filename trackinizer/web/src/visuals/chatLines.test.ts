@@ -604,3 +604,38 @@ test("a question asked on the canvas, and the whole turn answering it, stay off 
     ["assistant", "It groks at step 2400."],
   ]);
 });
+
+test("a canvas question from before the mark moved leaves the column too, rather than sitting in the thread for good", () => {
+  // The canvas used to mark a question at its END — `[asked about the figure on the
+  // canvas]` under the question — and the column only ever looked at the start, so every
+  // question asked then stayed in the thread beside the answer already on the page. A
+  // chat line cannot be taken back and clearing the thread would take the conversation
+  // with it, so the column reads the old mark where it was written instead.
+  const { lines } = readTranscript(parts(
+    said(0, "ada@example.com", "how did the clamp arm do?"),
+    record(1, "UserMessage", {
+      content: "why valence 0.6 and not higher?\n\n[asked about the prose on the canvas]\n{\"node\":\"prose\"}",
+      extra: { author: "ada@example.com" },
+    }),
+    call(2, "Read"),
+    result(3),
+    answer(4, "Because the probe had barely moved."),
+    said(5, "ada@example.com", "and the decay arm?"),
+    answer(6, "It groks at step 2400."),
+  ));
+  expect(lines.map((line) => [line.role, line.text])).toEqual([
+    ["user", "how did the clamp arm do?"],
+    ["user", "and the decay arm?"],
+    ["assistant", "It groks at step 2400."],
+  ]);
+});
+
+test("a line that merely talks about the canvas is not a canvas question", () => {
+  // The old mark is a whole line of its own, and the test is anchored to one. A person
+  // writing the words in a sentence is asking the thread, and the thread must answer.
+  const { lines } = readTranscript(parts(
+    said(0, "ada@example.com", "I asked about the figure on the canvas and got nothing"),
+    answer(1, "Ask it again and I will watch the run."),
+  ));
+  expect(lines.map((line) => line.role)).toEqual(["user", "assistant"]);
+});
