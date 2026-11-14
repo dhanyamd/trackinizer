@@ -19,6 +19,16 @@ export type LineAt = { readonly part: number; readonly idx: number };
  */
 export const RELAY_MARK = "→ ";
 
+/**
+ * What a question asked by pointing at one node of a composition starts with, before the
+ * id of that question and a `]`: `[canvas 4f2a91c0] why is this arm unpriced?`. The canvas
+ * writes it, the column reads it, and the agent gets it too — it says where the answer is
+ * expected, which is on the page, not in the thread, and which question it answers, since
+ * one agent answering two questions in a row must not have its first reply read as the
+ * second's.
+ */
+export const CANVAS_ASK = "[canvas";
+
 /** One question of a prompt, as AskUserQuestion asks it. */
 export type PromptQuestion = {
   readonly question: string;
@@ -192,6 +202,8 @@ export function readTranscript(parts: readonly ChatPart[], { tools = false }: { 
   // The tool lines still waiting for their result, by call id, and each one's place
   // in `lines`.
   const asked = new Map<string, number>();
+  /** Inside a turn the canvas asked for, which the column leaves to the canvas. */
+  let answeringCanvas = false;
   for (const { part, record } of inTimeOrder(parts)) {
     const key = `${part}:${record.idx}`;
     const payload = record.payload ?? {};
@@ -199,6 +211,13 @@ export function readTranscript(parts: readonly ChatPart[], { tools = false }: { 
     const sentAt = record.timestamp ?? null;
     const extra = objectOf(payload.extra);
     const person = personOf(record.kind, payload);
+    // A canvas question, and the whole turn the agent spends answering it, belong to the
+    // canvas. The column shows neither: a reader who asked by pointing at one node of a
+    // composition is owed one answer, there, not a payload and a transcript here and a
+    // `Working…` this thread never explains. The next line a person types ends it.
+    if (person && askedOnCanvas(person.text)) { answeringCanvas = true; continue; }
+    if (person) answeringCanvas = false;
+    if (answeringCanvas) continue;
     const step = goalStep(record.kind, payload, goal);
     const printed = printedOf(payload, lines.at(-1));
     if (extra.$delivery !== undefined) {
@@ -644,6 +663,24 @@ function interrupted(kind: string, payload: Readonly<Record<string, unknown>>): 
   const content = text(payload.content);
   return (kind === "UserMessage" && content.startsWith("[Request interrupted by user"))
     || (kind === "SystemMessage" && payload.subtype === "developer" && content.startsWith("<turn_aborted>"));
+}
+
+/**
+ * Whether a line was asked on the canvas, which answers it on the canvas.
+ *
+ * The server takes a chat's lines one way — `POST /api/chats`, which names the poster
+ * and the conversation — so a question pointed at one node of a composition is posted
+ * like any other. It does not READ like any other: it carries that node's composed JSON
+ * so the agent can answer from the data it emitted, and a column showing the payload and
+ * then `Working…` is a second, worse place to read an answer already on the page. The
+ * column leaves it to the canvas; the record is kept, so the thread is still the whole
+ * exchange when it is read back.
+ */
+function askedOnCanvas(words: string): boolean {
+  // The PERSON's words, not the raw record: a line the bot delivered is stored under a
+  // `[room] sender: ` prefix that `personOf` strips, and the mark is only at the start
+  // once it is gone. Reading the record raw let every delivered question through.
+  return words.startsWith(CANVAS_ASK);
 }
 
 /** A JSON object's fields, or none when the value is not an object. */

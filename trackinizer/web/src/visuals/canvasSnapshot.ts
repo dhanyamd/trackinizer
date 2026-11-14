@@ -26,13 +26,25 @@ export const HOME_ROUTE = "#/graph";
 const OVERLAY = /^#\/new(?:[/?]|$)/;
 
 /**
+ * Whether `hash` is a page of its own, the kind the rail's places go to — not a
+ * sheet or the create form laid over whatever page is already open, and not an
+ * address the app does not route.
+ *
+ * Changing one of these is the reader asking for a page. Changing the other is
+ * not, and the canvas must not take a sheet for a request to leave what it shows.
+ */
+export function movesThePage(hash: string): boolean {
+  return validHash(hash) && !SHEET.test(hash) && !OVERLAY.test(hash);
+}
+
+/**
  * The snapshot of a canvas holding `visuals` with the address at `hash`, or null
  * while the address is not a page of its own (a sheet or the create form over
  * the page, or no route yet): that is not a place to come back to.
  */
 export function snapshotOf(visuals: WorkspaceState["visuals"], hash: string): Snapshot | null {
   const paged = visuals.some((visual) => visual.type === PAGE);
-  if (paged && (!validHash(hash) || SHEET.test(hash) || OVERLAY.test(hash))) return null;
+  if (paged && !movesThePage(hash)) return null;
   return {
     page: paged ? hash : null,
     visuals: visuals.map((visual) => ({

@@ -26,7 +26,7 @@ import { useBoxes } from "../canvasMarks/useBoxes";
 import { CanvasBar } from "./CanvasBar";
 import { forget, go, interrupt, settle, step, takeInterrupted, useCanvasHistory } from "./canvasHistory";
 import { type Size, dropLegacySizes, legacyLayout, readLegacySizes } from "./canvasSizes";
-import { HOME_ROUTE, homeSnapshot, PAGE, planRestore, type Snapshot, snapshotOf } from "./canvasSnapshot";
+import { HOME_ROUTE, homeSnapshot, movesThePage, PAGE, planRestore, type Snapshot, snapshotOf } from "./canvasSnapshot";
 import { type CanvasTab, leftTab, MAX_TABS, neighbourOf, newTabName, openTabOf, sizesOf, tabSnapshot, tabsOf } from "./canvasTabs";
 import { followColumns } from "./chatColumnState";
 import { orderVisuals } from "./layout";
@@ -120,6 +120,49 @@ export function Canvas({ children }: { readonly children: ReactNode }) {
     params: {},
   });
   /**
+   * Whether the stage is showing the routed page instead of the visual over it.
+   *
+   * The rail navigates — Graph, Files, Runs, Evidence are routes — and a route draws only
+   * in the page pane. A composition sits over that pane, and the control that moved one
+   * aside was removed, leaving a destructive Clear as the only way back: every rail click
+   * changed the address and nothing on screen. This is that control, restored as a toggle,
+   * and it writes nothing to the station, so the composition is still there to come back to.
+   */
+  const [onPage, setOnPage] = useState(false);
+
+  // Going to a page shows it. The rail's four places are routes, so a click there has to
+  // put the page on the stage itself: with the toggle alone, Graph changed the address
+  // under a composition that kept the stage and nothing on screen moved — the reader
+  // clicked Graph and got no graph. Only an actual change counts, so the station still
+  // opens on whatever it last showed, and a sheet laid over the page is not a move.
+  const paged = movesThePage(hash);
+  const cameFrom = useRef(hash);
+  useEffect(() => {
+    const before = cameFrom.current;
+    cameFrom.current = hash;
+    if (hash === before || !paged) return;
+    setOnPage(true);
+    // The page pane can be closed outright, and then a route has no surface to draw in.
+    if (!latestWorkspace.current?.visuals.some((visual) => visual.type === PAGE)) {
+      operate({ kind: "show", visual_type: PAGE, placement: "main" });
+    }
+  }, [hash, paged]);
+
+  // A visual just put up takes the stage back. An answer the agent composes while the
+  // reader is on Graph would otherwise land behind the page and never be seen, and the
+  // ask bar's reply is exactly that: a new instance appearing on the station.
+  const standing = visible.filter((visual) => visual.type !== PAGE).map((visual) => visual.id);
+  const standingKey = standing.join(" ");
+  const stood = useRef<readonly string[]>(standing);
+  useEffect(() => {
+    const before = stood.current;
+    stood.current = standing;
+    if (standing.some((id) => !before.includes(id))) setOnPage(false);
+    // `standing` is this render's array; `standingKey` is what makes it a change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [standingKey]);
+
+  /**
    * The one surface the canvas draws.
    *
    * The stage used to hold any number of tiles at once — a strip of main ones, a
@@ -132,7 +175,8 @@ export function Canvas({ children }: { readonly children: ReactNode }) {
    * The page is the resting surface, so it draws whenever nothing has been put on top
    * of it; the focused instance wins when the agent or a click named one.
    */
-  const shown = panes.find((pane) => pane.id === workspace?.focused_instance)
+  const shown = (onPage ? browse : null)
+    ?? panes.find((pane) => pane.id === workspace?.focused_instance)
     ?? [...visible].reverse().map((visual) => panes.find((pane) => pane.id === visual.id)).find((pane) => pane && pane.type !== PAGE)
     ?? browse
     ?? panes[0];
@@ -420,7 +464,16 @@ export function Canvas({ children }: { readonly children: ReactNode }) {
       visualTypes,
     } : null}>
     <div className="visual-canvas">
-      {workspace && <CanvasBar tabs={tabs} open={openTab} back={history.back} forward={history.forward}
+      {workspace && <CanvasBar onPage={onPage} showPage={(page) => {
+        setOnPage(page);
+        // The page pane can be closed outright, and then there is nothing to put the
+        // visual down in front of — the routes have no surface at all. It is opened back
+        // BESIDE what is on the stage, not over it: `goHome` would restore the home
+        // snapshot and drop the composition the agent just built, which is a reader
+        // losing their answer for clicking Graph.
+        if (page && !browse) operate({ kind: "show", visual_type: PAGE, placement: "main" });
+      }}
+        tabs={tabs} open={openTab} back={history.back} forward={history.forward}
         moving={history.moving} home={home} canAdd={tabs.length < MAX_TABS} boxes={boxes}
         actions={{ back: () => stepBy(-1), forward: () => stepBy(1), home: goHome, clear: clearCanvas,
           open: (id) => { if (id !== openTab) switchTab(id, leaving()); }, add: addTab, close: closeTab,

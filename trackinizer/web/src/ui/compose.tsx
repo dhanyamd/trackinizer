@@ -20,10 +20,11 @@
 // inside a composition, which is why it is the node an answer picks when the shape of
 // what lies around a record is the finding, not a sentence about it.
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { getGraphFocus, type FocusNode } from "../api/graph";
-import { useMeta } from "../app/boot";
+import { MetaContext, useMeta } from "../app/boot";
+import { currentTopic, sameTopic, setTopic, topicOf } from "../graph/topic";
 import { detailQueries } from "../detail/queries";
 import type { Detail } from "../api/detail";
 import { Block } from "./block";
@@ -340,11 +341,46 @@ export function isComposed(flow: unknown): flow is ComposedFlow {
  *  the data the agent emitted rather than a screenshot of it. Serialisation is capped —
  *  a cloud of ten thousand points is not a useful thing to hand back, and a surface
  *  that stalls while stringifying it has spent the whole budget on one verb. */
+/** How much composed JSON one node may carry, which is a question's whole budget. */
+const ITEM_BUDGET = 4000;
+
+/**
+ * The item with its long arrays sampled: every label, axis and series name kept, each
+ * long run of values cut to a head and a count of the rest.
+ *
+ * A figure's data is the part that does not fit, and it is the part a question least
+ * often needs — "what is this showing", "which arm is the control" and "why is this one
+ * flat" are all answered from the labels and a few points. Keeping the shape and losing
+ * the bulk answers them; losing the whole item answers none.
+ */
+function sampled(value: unknown, keep: number): unknown {
+  if (Array.isArray(value)) {
+    const head = value.slice(0, keep).map((each) => sampled(each, keep));
+    return value.length > keep ? [...head, `…${value.length - keep} more`] : head;
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([field, v]) => [field, sampled(v, keep)]));
+  }
+  if (typeof value === "string" && value.length > 300) return `${value.slice(0, 300)}…`;
+  return value;
+}
+
 function pointable(item: Item): Record<string, string> {
   let payload: string;
   try {
     payload = JSON.stringify(item);
-    if (payload.length > 4000) payload = JSON.stringify({ node: item.node, note: "item too large to carry whole" });
+    // Capped, because a cloud of ten thousand points is not a useful thing to hand back
+    // and a surface that stalls stringifying it has spent the whole budget on one verb.
+    // It used to be capped by dropping the item, which told a reader who pointed at a
+    // figure and asked what it showed that "the JSON was not sent — point at a smaller
+    // node": the surface blaming them for its own limit. It is sampled instead, coarser
+    // each pass, and only a value that will not fit even at two points per series falls
+    // back to naming its fields, which is still something to answer from.
+    for (const keep of [12, 5, 2]) {
+      if (payload.length <= ITEM_BUDGET) break;
+      payload = JSON.stringify(sampled(item, keep));
+    }
+    if (payload.length > ITEM_BUDGET) payload = JSON.stringify({ node: item.node, fields: Object.keys(item) });
   } catch { payload = JSON.stringify({ node: item.node }); }
   return { "data-node": item.node, "data-item": payload };
 }
@@ -1531,6 +1567,18 @@ function GraphPane({ record, hops, open, height }: {
  * family: a reader scans the left edge for the next thing.
  */
 export function ComposedView({ flow }: { readonly flow: ComposedFlow }) {
+  const kinds = useContext(MetaContext)?.kinds ?? NO_KINDS;
+  const words = useMemo(() => wordsOf(flow), [flow]);
+  // What the reader is reading about, for the rail's Graph to open on (`graph/topic`).
+  // Cleared on the way out only when it is still ours: the canvas can draw a second
+  // composition before this one is taken down, and that one's subject is the live one.
+  useEffect(() => {
+    const mine = topicOf(words, kinds);
+    setTopic(mine);
+    return () => {
+      if (sameTopic(currentTopic(), mine)) setTopic(null);
+    };
+  }, [words, kinds]);
   return (
     <section className="ui-composed" aria-label={flow.title}>
       <p className="ui-composed-h">
@@ -1542,4 +1590,20 @@ export function ComposedView({ flow }: { readonly flow: ComposedFlow }) {
       </div>
     </section>
   );
+}
+
+/** One array, so a composition drawn without a `MetaContext` does not re-run on every render. */
+const NO_KINDS: readonly string[] = [];
+
+/**
+ * The words of `flow` a ref can be read out of: its title and prompt, and the text and
+ * notes its items carry. Not the whole item — a figure's axis labels and a table's cells
+ * are data the agent put there, and a `#` in one of them names no row.
+ */
+function wordsOf(flow: ComposedFlow): string {
+  const said = flow.compose.flatMap((item) => {
+    const held = item as { readonly text?: unknown; readonly note?: unknown; readonly label?: unknown };
+    return [held.text, held.note, held.label].filter((words) => typeof words === "string");
+  });
+  return [flow.title, flow.prompt, ...said].join("\n\n");
 }

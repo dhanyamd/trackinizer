@@ -1,4 +1,5 @@
 import { APP } from "../appName";
+import { topicName, useTopic } from "../graph/topic";
 import type { Route } from "../router/route";
 import { useRouter } from "../router/router";
 import { Icon } from "../ui/icons";
@@ -13,9 +14,16 @@ import "./chrome.css";
  * one the address bar holds, and Chat is lit while its column is open beside
  * whatever page is.
  */
-const PLACES: readonly { readonly name: string; readonly icon: any; readonly to: Route; readonly title: string }[] = [
+const PLACES: readonly {
+  readonly name: string;
+  readonly icon: any;
+  readonly to: Route;
+  readonly title: string;
+  /** Whether this place opens on what the canvas is about, when the canvas is about something. */
+  readonly onTopic?: true;
+}[] = [
   { name: "Chat", icon: "chat", to: { name: "blocks" }, title: "Chat and the active canvas instrument" },
-  { name: "Graph", icon: "graph", to: { name: "graph" }, title: "The newest records and the wires between them" },
+  { name: "Graph", icon: "graph", to: { name: "graph" }, onTopic: true, title: "The newest records and the wires between them" },
   { name: "Files", icon: "folder", to: { name: "list", kind: "CodeChange" }, title: "Code changes, source files, and research artifacts" },
   { name: "Runs", icon: "terminal", to: { name: "console" }, title: "The runs across sessions, and a line to message them" },
   { name: "Evidence", icon: "book", to: { name: "list", kind: "Issue" }, title: "What was recorded, and what it bears on" },
@@ -24,6 +32,7 @@ const PLACES: readonly { readonly name: string; readonly icon: any; readonly to:
 export function Rail() {
   const { route, navigate } = useRouter();
   const { hidden } = useChatColumn();
+  const topic = useTopic();
   return (
     <nav className="rail" aria-label={`${APP.name} places`}>
       {PLACES.map((place) => {
@@ -31,15 +40,19 @@ export function Rail() {
         const lit = isChat
           ? route.name === "blocks" || (!hidden && route.name !== "graph" && route.name !== "console" && route.name !== "list")
           : matches(route, place.to);
+        // Graph opens lit on what the canvas is about, when it is about a row. A focus
+        // lights and does not filter, so this takes nothing away from the bare view it
+        // replaces — it saves finding one record among thousands by eye.
+        const to = place.onTopic && topic ? { name: "graph", focus: { ref: topic, hops: 2 } } as const : place.to;
         return (
           <button key={place.name} type="button" className={lit ? "on" : undefined} aria-current={lit ? "page" : undefined}
-            title={place.title}
+            title={place.onTopic && topic ? `${place.title}, opened on ${topicName(topic)}` : place.title}
             onClick={() => {
               if (isChat) {
                 setChatHidden(false);
                 navigate({ name: "blocks" });
               } else {
-                navigate(place.to);
+                navigate(to);
               }
             }}>
             <Icon name={place.icon} size={21} />

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { SessionRecord } from "../api/sessions";
-import { type ChatPart, goalOf, linesThrough, openPrompts, PENDING, readTranscript, RELAY_MARK, sentBefore, withPending } from "./chatLines";
+import { CANVAS_ASK, type ChatPart, goalOf, linesThrough, openPrompts, PENDING, readTranscript, RELAY_MARK, sentBefore, withPending } from "./chatLines";
 
 function record(idx: number, kind: string, payload: { [field: string]: unknown }): SessionRecord {
   return { idx, kind, payload, text: "", context_id: null, timestamp: null, model: null, ciphertext: null } as unknown as SessionRecord;
@@ -575,5 +575,32 @@ test("a delivered line shows its words with or without a room, a sender or a con
   expect(lines.map(({ author, text }) => [author, text])).toEqual([
     ["ada@example.com", "one"], ["ada@example.com", "two"], ["ada@example.com", "three"],
     ["ada@example.com", "four"], ["ada@example.com", "five"],
+  ]);
+});
+
+test("a question asked on the canvas, and the whole turn answering it, stay off the column", () => {
+  // The canvas asks by posting a marked line — the server takes a chat's lines no other
+  // way — and answers on the page. A column that showed the line would show the pointed-at
+  // node's composed JSON; one that showed the turn would show a second copy of the answer
+  // and a `Working…` the thread never explains. Both belong to the canvas.
+  const { lines } = readTranscript(parts(
+    said(0, "ada@example.com", "how did the clamp arm do?"),
+    answer(1, "It never left chance."),
+    record(2, "UserMessage", { content: `${CANVAS_ASK} 94e96e1d] what is the chance rate\n{"node":"prose"}`, extra: { author: "ada@example.com" } }),
+    // The same question as the bot delivers one: stored under a `[room] sender: ` prefix,
+    // which `personOf` strips. Read raw, the mark is not at the start and it slips through.
+    record(8, "UserMessage", { content: `ada@example.com: ${CANVAS_ASK} 7c0b1e42] and the norm?`,
+      extra: { $inbound: { source: "ada@example.com" } } }),
+    call(3, "Read"),
+    result(4),
+    answer(5, "1.03%, from 4,705 held-out pairs."),
+    said(6, "ada@example.com", "and the decay arm?"),
+    answer(7, "It groks at step 2400."),
+  ));
+  expect(lines.map((line) => [line.role, line.text])).toEqual([
+    ["user", "how did the clamp arm do?"],
+    ["assistant", "It never left chance."],
+    ["user", "and the decay arm?"],
+    ["assistant", "It groks at step 2400."],
   ]);
 });

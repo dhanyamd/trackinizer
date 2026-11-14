@@ -209,7 +209,7 @@ function userNavigates(hash: string) {
   });
 }
 
-test("with the page closed, a navigation of the person's own writes nothing and leaves it closed", async () => {
+test("with the page closed, a navigation of the person's own opens it once and draws the route", async () => {
   vi.mocked(getVisualCatalog).mockResolvedValue(CATALOG_WITH_NOTE);
   const closed = pageAndNote(false);
   vi.mocked(createDefaultWorkspace).mockResolvedValue(closed);
@@ -217,17 +217,54 @@ test("with the page closed, a navigation of the person's own writes nothing and 
   vi.mocked(applyWorkspaceOperation).mockResolvedValue({ ...pageAndNote(true), revision: 4 });
   render(<QueryClientProvider client={createQueryClient(() => {})}><Canvas><div>Browse content</div></Canvas></QueryClientProvider>);
   await waitFor(() => expect(document.querySelector('[data-visual-type="test.note"]')).not.toBeNull(), { interval: 1 });
+  // Opening on the station writes nothing: it shows what it was left showing.
   expect(applyWorkspaceOperation).not.toHaveBeenCalled();
+  expect(screen.queryByText("Browse content")).toBeNull();
 
-  // The page, once closed, stays closed until something asks for it — the Workbench
-  // option above, an agent's show — so a run of navigations writes nothing at all.
+  // The rail's places are routes, and a route draws only in the page pane, so going to
+  // one has to open that pane and put it on the stage. It used to change the address and
+  // leave the note standing: a reader clicked Graph and got no graph.
   for (const route of ["#/list/Issue", "#/list/Belief"]) {
     userNavigates(route);
     await new Promise((settle) => setTimeout(settle, 5));
   }
-  expect(applyWorkspaceOperation).not.toHaveBeenCalled();
-  expect(document.querySelector(".visual-main-strip")).toBeNull();
-  expect(screen.queryByText("Browse content")).toBeNull();
+  await screen.findByText("Browse content");
+  // Once, though. The second navigation has a page to draw in already.
+  expect(applyWorkspaceOperation).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(applyWorkspaceOperation).mock.calls[0]![2])
+    .toEqual({ kind: "show", visual_type: "trax.browse", placement: "main" });
+});
+
+/** The types the stage is drawing, in order: a tile tucked behind another is on the stage but out of sight. */
+function shownTypes(): string[] {
+  return [...document.querySelectorAll<HTMLElement>(".visual-stage [data-visual-type]")]
+    .filter((tile) => tile.style.display !== "none")
+    .map((tile) => tile.dataset.visualType!);
+}
+
+test("a visual put up while the reader is on a route takes the stage back from the page", async () => {
+  vi.mocked(getVisualCatalog).mockResolvedValue(CATALOG_WITH_NOTE);
+  // The station opens with the page alone; the note arrives after, the way an agent's
+  // `show` or the ask bar's answer does — as an instance that was not there before.
+  const paged = { ...workspace, visuals: [{ ...workspace.visuals[0]!, placement: "main" as const }] };
+  vi.mocked(createDefaultWorkspace).mockResolvedValue(paged);
+  vi.mocked(getWorkspace).mockResolvedValue(paged);
+  vi.mocked(applyWorkspaceOperation).mockResolvedValue({ ...pageAndNote(true), revision: 4 });
+  function PutUpANote() {
+    const actions = useWorkspaceActions();
+    return <button onClick={() => actions?.operate({ kind: "show", visual_type: "test.note" })}>Put up a note</button>;
+  }
+  render(<QueryClientProvider client={createQueryClient(() => {})}><Canvas><PutUpANote /></Canvas></QueryClientProvider>);
+  const put = await screen.findByRole("button", { name: "Put up a note" });
+  userNavigates("#/list/Issue");
+  await new Promise((settle) => setTimeout(settle, 5));
+  expect(shownTypes()).toEqual(["trax.browse"]);
+
+  fireEvent.click(put);
+  await waitFor(() => expect(document.querySelector(NOTE_TILE)).not.toBeNull(), { interval: 1 });
+  // The page stays mounted — a route must keep its scroll and its iframes — but the note
+  // is what the stage draws. A reply composed behind the page would never be read.
+  expect(shownTypes()).toEqual(["test.note"]);
 });
 
 test("a view that crashes inside the canvas gets the crash screen with Copy details and Reload, and clears when the page moves", async () => {
@@ -392,4 +429,22 @@ test("a surface on the stage offers no chrome of its own, and none of the window
   expect(document.querySelector(".visual-divider")).toBeNull();
   expect(document.querySelector(".visual-side-column")).toBeNull();
   expect(document.querySelector(".visual-window-edge")).toBeNull();
+});
+
+test("the page toggle puts the visual down so the rail's routes draw, and picks it back up", async () => {
+  // Graph, Files, Runs and Evidence are routes, and a route draws only in the page pane.
+  // A composition covers that pane and the control that moved one aside was removed, so
+  // every rail click changed the address and nothing on screen. Nothing is written to the
+  // station either way: the composition is still there to come back to.
+  history.replaceState(null, "", "#/activity");
+  show(pageAndNote(true));
+  expect(await screen.findByRole("button", { name: "Show the page" })).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Show the page" }));
+  expect(await screen.findByRole("button", { name: "Back to the canvas" })).toBeTruthy();
+  expect(screen.getByText("Browse content")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Back to the canvas" }));
+  expect(await screen.findByRole("button", { name: "Show the page" })).toBeTruthy();
+  expect(vi.mocked(applyWorkspaceOperation)).not.toHaveBeenCalled();
 });

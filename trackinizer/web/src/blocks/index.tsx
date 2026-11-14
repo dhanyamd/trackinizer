@@ -21,6 +21,7 @@ import "../visuals/Knowledge.css";
 import "./fit.css";
 import { setChatHidden } from "../visuals/chatColumnState";
 import { getGraph } from "../api/graph";
+import { listStations } from "../api/stations";
 import { getWorkspace } from "../api/workspaces";
 import { useCurrentStation } from "../stations/store";
 import { askTheChat } from "./askChat";
@@ -162,21 +163,77 @@ function FocusFlow({ focus, hops }: { readonly focus: string; readonly hops: 1 |
  * is not using changes. A station with no conversation yet starts one, which is the same
  * thread the chat column then shows — the canvas never opens a second channel.
  */
-function useCanvasAsk(): (asked: Asked) => void | Promise<string> {
+/**
+ * The station a short question off the canvas is asked on, when one is standing.
+ *
+ * The station that composed the page is answered by the composer, and a composer is one
+ * turn at a time: measured, a two-word follow-up sat on `thinking…` for minutes behind a
+ * turn that was reading PNGs and rewriting the surface. A reader asking what a number
+ * means is not asking for the page to be rebuilt. So a station named this one answers
+ * the canvas instead, if the lab is running an agent on it; nothing here creates it,
+ * because a station with no agent on it answers nothing, and falling back to the
+ * composer is slow but certain.
+ */
+const ASKER = "canvas questions";
+
+/**
+ * What the pointed-at node sits in: the page's title, and one line per node around it.
+ *
+ * A question sent with the node alone is a question with no page. "Explain this" on one
+ * figure came back as an essay reciting the figure's own numbers, because the agent had
+ * the numbers and nothing to say they were an intervention arm in an argument three nodes
+ * above. The surrounding items are the argument; their labels are what a reader has in
+ * their head when they point at one of them, so they are what rides along.
+ */
+function pageAround(flow: ComposedFlow, pointedAt: number): string {
+  const lines = flow.compose.map((item, index) => {
+    const named = item as { node: string; text?: string; label?: string; caption?: string; title?: string; figure?: { label?: string } };
+    const says = named.title ?? named.label ?? named.caption ?? named.figure?.label ?? named.text ?? "";
+    return `${index === pointedAt ? "→" : " "} ${named.node}: ${says.slice(0, 110)}`;
+  });
+  return [`The page is titled "${flow.title}". Its nodes, in order, with the one asked about marked:`, ...lines].join("\n");
+}
+
+function useCanvasAsk(flow: ComposedFlow | null): (asked: Asked) => void | Promise<string> {
   const station = useCurrentStation();
   return useCallback(async (asked: Asked) => {
     if (!station.id) throw new Error("this tab is not on a station yet");
-    const workspace = await getWorkspace(station.id);
+    const asker = (await listStations()).find((s) => s.name === ASKER && !s.hidden) ?? null;
+    const workspace = await getWorkspace(asker?.id ?? station.id);
     const page = typeof location !== "undefined" && location.hash.startsWith("#/") ? location.hash : null;
     // The node's own composed JSON rides along: the agent answers from the item it drew,
     // which is the whole reason this beats sending a screenshot.
+    //
+    // And the question states its own terms. The agent on the other end is placed by
+    // `trax run`, whose system prompt is the canvas composer's — read the brief, read the
+    // graph, recompose the page — so a two-word follow-up was answered by a hundred tool
+    // calls and a rebuilt surface while the reader watched a spinner. A system prompt
+    // appended under that one did not hold; the turn itself does, because it is the last
+    // thing said and the most specific. The ceiling is what the reader can see: a box on
+    // the page, which fits a paragraph, not a composition.
     const about = JSON.stringify(asked.about.item ?? null);
+    const where = flow ? pageAround(flow, flow.compose.findIndex((item) => item === asked.about.item)) : null;
     const reply = await askTheChat(
-      { workspaceId: station.id, conversationId: workspace.conversation_id ?? null, page },
-      `${asked.question}\n\n[asked about the ${asked.about.node} on the canvas]\n${about.slice(0, 4000)}`,
+      { workspaceId: asker?.id ?? station.id, conversationId: workspace.conversation_id ?? null, page },
+      [
+        asked.question,
+        "",
+        "Answer from what is below and this question alone. Do not run commands, read files,",
+        "query the graph, take screenshots, or recompose the canvas — the answer is going in a",
+        "small box on the page the reader is looking at, and they are watching it spin.",
+        "At most three sentences. Answer the question that was asked and stop: do not recap the",
+        "node, do not list what it does not say, do not explain what you cannot answer unless",
+        "that is the whole answer. Lead with the number if there is one. Colours, fonts and",
+        "layout are the app's and are in no JSON — if asked about one, say which series or row",
+        "is meant and answer about that.",
+        ...(where ? ["", where] : []),
+        "",
+        `[the ${asked.about.node} they pointed at, as it was composed]`,
+        about.slice(0, 4000),
+      ].join("\n"),
     );
     return reply.text;
-  }, [station.id]);
+  }, [station.id, flow]);
 }
 
 export function BlocksView() {
@@ -187,7 +244,7 @@ export function BlocksView() {
   (window as unknown as { __blocksDebug?: unknown }).__blocksDebug = { hash: typeof location !== "undefined" ? location.hash : "", focus, matched: !!focusMatch };
   const hops = (focusMatch && focusMatch[2] ? Number(focusMatch[2]) : 2) as 1 | 2 | 3;
   const [state, setState] = useState<{ readonly flow?: KnowledgeFlow; readonly error?: string }>({});
-  const askOnCanvas = useCanvasAsk();
+  const askOnCanvas = useCanvasAsk(isComposed(state.flow) ? state.flow : null);
   useEffect(() => {
     if (focus) return;
     let live = true;

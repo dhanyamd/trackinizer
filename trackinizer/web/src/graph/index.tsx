@@ -130,6 +130,25 @@ export function GraphView({ createRenderer = forceGraphRenderer }: { createRende
     setArriving(false);
     if (focusNode) setSelectedId(focusNode.id);
   }
+  /**
+   * Opened on a focus the loaded graph does not hold, reach once for the next size up.
+   *
+   * The view draws the newest `limit` records, and a focus lights within them. On a store
+   * of a few thousand rows the record someone has just been reading about is usually not
+   * among the newest thousand, so the link they followed landed on `Belief#131 is not
+   * among the nodes loaded` — true, and useless: the record was one size setting away the
+   * whole time. One step only, never past the size the view draws without asking, and
+   * once per focus, so a record that really is absent settles on the honest answer.
+   */
+  const widened = useRef<string | null>(null);
+  useEffect(() => {
+    if (!data || focus === null || focusNode) return;
+    const asked = refKey(focus.ref);
+    const wider = LIMIT_STEPS.find((size) => size > view.limit && size <= ASK_ABOVE);
+    if (wider === undefined || widened.current === asked) return;
+    widened.current = asked;
+    setView((state) => ({ ...state, limit: wider }));
+  }, [data, focus, focusNode, view.limit]);
   const reached = useMemo(
     () => (data && focusNode ? reach(data, focusNode.id, { skipEdges: shownBy.skipEdges, keep: shownBy.keep }) : null),
     [data, focusNode, shownBy],
@@ -497,6 +516,14 @@ function coveredOf(host: HTMLElement): Covered {
 /** The node a focus names, if the graph has it. */
 function findFocus(nodes: readonly GraphNode[], ref: FocusRef): GraphNode | undefined {
   return nodes.find((row) => ("id" in ref ? row.id === ref.id : row.kind === ref.kind && row.seq === ref.seq));
+}
+
+/** The sizes a focus that is not loaded yet may widen the view to, smallest first. */
+const LIMIT_STEPS: readonly number[] = [1_000, 5_000];
+
+/** One text per focus, so widening is tried once for each and not once per render. */
+function refKey(ref: FocusRef): string {
+  return "id" in ref ? ref.id : `${ref.kind}#${ref.seq}`;
 }
 
 /** The matches as the results list them: within a focus's reach, then elsewhere; without a focus, all together. */

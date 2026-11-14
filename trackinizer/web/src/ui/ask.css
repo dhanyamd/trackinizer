@@ -16,9 +16,25 @@
   font:400 12px/1.4 var(--mono); padding:2px 4px; }
 .ui-ask button:disabled { color:var(--ink-machine); cursor:default; }
 
-.ui-ask-answer { position: absolute; left: 0; right: 0; margin-top: 8px; background: var(--surface);
-  border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 13px; z-index: 2147480000; }
-.ui-ask-q { font-size: 10.5px; color: var(--ink-machine); margin-bottom: 6px; }
-.ui-ask-a { font-size: 12.5px; line-height: 1.5; color: var(--text); white-space: pre-wrap; }
-.ui-ask-thinking { position: absolute; left: 0; right: 0; margin-top: 8px;
-  font-size: 10.5px; color: var(--ink-machine); }
+/* The exchange is placed where it was asked, and stays there once the ring is gone:
+   both states take the same box, so an answer does not jump when it arrives. It is
+   capped rather than stretched — an answer wider than the node it is about reads as
+   a new section of the page instead of a remark on one part of it. */
+.ui-ask-answer, .ui-ask-waiting { position: absolute; z-index: 2147480000;
+  width: min(560px, 100%); max-height: 46vh; overflow: auto; }
+/* Both states are opaque: the box sits over the page it is about, and a transparent
+   one puts two sentences on top of the paragraph below the node, which is unreadable. */
+.ui-ask-answer, .ui-ask-waiting { background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 8px; padding: 10px 13px; }
+.ui-ask-q { font-size: 10.5px; color: var(--ink-machine); margin-bottom: 6px; padding-right: 18px; }
+.ui-ask-close { position: absolute; top: 6px; right: 7px; background: none; border: 0; padding: 0 3px;
+  color: var(--ink-machine); cursor: pointer; font: 400 13px/1 var(--mono); }
+.ui-ask-close:hover { color: var(--text); }
+.ui-ask-a { font-size: 12.5px; line-height: 1.5; color: var(--text); }
+/* The answer is markdown, so it brings its own blocks. They are tightened to a remark
+   on one node: the first line sits against the question, and a table scrolls in place
+   rather than widening the box past the thing it is about. */
+.ui-ask-a > :first-child { margin-top: 0; }
+.ui-ask-a > :last-child { margin-bottom: 0; }
+.ui-ask-a table { display: block; overflow-x: auto; max-width: 100%; }
+.ui-ask-thinking { font-size: 10.5px; color: var(--ink-machine); }

@@ -34,7 +34,7 @@ export type CanvasBarActions = {
  * `back`, `forward` and `home` are still in the props the canvas passes — the actions behind
  * them live on and the palette reaches them — but no button here draws them any more.
  */
-export function CanvasBar({ tabs, open, moving, canAdd, boxes, actions }: {
+export function CanvasBar({ tabs, open, moving, canAdd, boxes, actions, onPage, showPage }: {
   readonly tabs: readonly CanvasTab[];
   readonly open: string;
   readonly back: boolean;
@@ -44,6 +44,10 @@ export function CanvasBar({ tabs, open, moving, canAdd, boxes, actions }: {
   readonly canAdd: boolean;
   readonly boxes: Boxes;
   readonly actions: CanvasBarActions;
+  /** Whether the stage is showing the routed page rather than the visual on top of it. */
+  readonly onPage?: boolean;
+  /** Put the visual away to read the page, or bring it back. */
+  readonly showPage?: (page: boolean) => void;
 }) {
   const [naming, setNaming] = useState<{ readonly id: string; readonly value: string } | null>(null);
   const strip = useRef<HTMLElement>(null);
@@ -101,6 +105,17 @@ export function CanvasBar({ tabs, open, moving, canAdd, boxes, actions }: {
             actions.add();
           }}><Icon name="plus" size={15} /></button>
         <span className="canvas-toolbar-tail">
+          {/* The way back to the page, and to the rail that navigates it. A composition
+              covers the stage, and the only control that moved it aside was a destructive
+              Clear; Graph, Files, Runs and Evidence are routes, so with no way to put the
+              visual down they changed the address and nothing on screen. This puts it
+              down and picks it back up, and writes nothing to the station either way. */}
+          {showPage && (
+            <button className="canvas-bar-button" type="button" aria-pressed={onPage === true}
+              aria-label={onPage ? "Back to the canvas" : "Show the page"}
+              title={onPage ? "Back to the canvas" : "Show the page the rail navigates"}
+              onClick={() => showPage(!onPage)}><Icon name={onPage ? "layers" : "doc"} size={14} /></button>
+          )}
           <span className="canvas-bar-button" role="presentation" title="More options" aria-hidden="true">
             <Icon name="more" size={14} />
           </span>
