@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { linkLook, nodeLook, readPalette } from "./encode";
+import { linkLook, nodeLook, panelKind, panelTint, panelValence, readPalette } from "./encode";
 import { PALETTE } from "./testing";
 
 afterEach(() => {
@@ -11,6 +11,7 @@ const shape = (fields: Partial<Parameters<typeof nodeLook>[0]> = {}) => ({
   kind: "Issue",
   status: "active",
   degree: 0,
+  authority: 0,
   root: false,
   ...fields,
 });
@@ -20,13 +21,11 @@ test("a node fills with its kind's hue and rings with its status's; an unknown k
   expect(nodeLook(shape({ kind: "Gadget", status: "paused" }), PALETTE)).toMatchObject({ fill: "fallback", ring: "fallback" });
 });
 
-test("a node's radius grows with the square root of its degree up to 14; a root Issue is the largest", () => {
+test("a node's radius is its kind's base, lifted by its authority; the mass stays small", () => {
   const radius = (fields: Partial<Parameters<typeof nodeLook>[0]>) => nodeLook(shape(fields), PALETTE).radius;
-  expect(radius({ degree: 0 })).toBe(4);
-  expect(radius({ degree: 4 })).toBeCloseTo(8.4);
-  expect(radius({ degree: 100 })).toBe(14);
-  expect(radius({ root: true })).toBe(16);
-  expect(radius({ root: true, degree: 100 })).toBe(18);
+  expect(radius({ authority: 0 })).toBe(2.9);
+  expect(radius({ authority: 0.5 })).toBeCloseTo(2.9 + 6.5 * 0.5);
+  expect(radius({ authority: 1 })).toBeCloseTo(2.9 + 6.5);
 });
 
 test("an abandoned or invalid node recedes to a quarter", () => {
@@ -105,7 +104,9 @@ test("the palette is the theme's tokens for every kind, edge kind and status, or
     ["--g-faint", "#888888"],
     ["--text", "#999999"],
     ["--accent-hover", "#aaaaaa"],
-    ["--amber", "#bbbbbb"],
+    ["--g-duo-record", "#bbbbbb"],
+    ["--g-duo-belief", "#cccccc"],
+    ["--amber", "#dddddd"],
   ]) {
     root.style.setProperty(name!, ` ${value}`);
   }
@@ -120,6 +121,45 @@ test("the palette is the theme's tokens for every kind, edge kind and status, or
     faint: "#888888",
     halo: "#999999",
     match: "#aaaaaa",
-    highlight: "#bbbbbb",
+    duoRecord: "#bbbbbb",
+    duoBelief: "#cccccc",
+    highlight: "#dddddd",
   });
+});
+
+test("the graph's own valence and ground tokens beat the app's list colours", () => {
+  const root = document.documentElement;
+  for (const [name, value] of [
+    ["--g-vpos", "#9fd4a8"],
+    ["--g-vneg", "#f5b07a"],
+    ["--g-bg", "#000"],
+    ["--g-kind-Issue", "#6e8efb"],
+    ["--l-evidence", "#666666"],
+    ["--l-against", "#777777"],
+    ["--bg", "#555555"],
+  ]) {
+    root.style.setProperty(name!, value);
+  }
+  const palette = readPalette(root, { kinds: ["Issue"], edgeKinds: [], statuses: [] });
+  expect([palette.support, palette.against, palette.background]).toEqual(["#9fd4a8", "#f5b07a", "#000"]);
+});
+
+test("a panel wears a reference's hue one step lighter than the canvas draws it", () => {
+  // The design's PCOL and PVPOS/PVNEG: `Kind#seq` in prose is small text, and the
+  // disc's hue at that size reads muddy, so each is lifted toward white.
+  const palette = { ...PALETTE, kinds: { Issue: "#6e8efb" } };
+  expect(panelKind(palette, "Issue")).toBe("#97aefc");
+  expect(panelTint("#6e8efb")).toBe("#97aefc");
+  expect(panelValence("#9fd4a8")).toBe("#b2ddb9");
+  expect(panelValence("#f5b07a")).toBe("#f7c095");
+});
+
+test("a claim nobody has scored does not draw as the surest one on the field", () => {
+  // The fill carries confidence, and `?? 1` put an unscored claim at the top of
+  // the ramp — the view saying "certain" where the record says nothing.
+  const sure = nodeLook({ kind: "Belief", status: "active", confidence: 1 } as never, PALETTE);
+  const unscored = nodeLook({ kind: "Belief", status: "active" } as never, PALETTE);
+  const middling = nodeLook({ kind: "Belief", status: "active", confidence: 0.5 } as never, PALETTE);
+  expect(unscored.fillAlpha).toBeLessThan(sure.fillAlpha);
+  expect(unscored.fillAlpha).toBeCloseTo(middling.fillAlpha, 5);
 });

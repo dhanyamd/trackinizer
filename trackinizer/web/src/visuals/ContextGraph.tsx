@@ -74,6 +74,9 @@ export function ContextGraph({
         hover: (node) => setHovered(node ? { node, ...made.screenOf(node) } : null),
         click: (node) => open(node),
         doubleClick: () => {},
+        // The preview draws one record's neighbourhood, which is never grouped
+        // into islands, so there is no island name here to press.
+        island: () => {},
       },
       () => NOTHING_COVERS,
     );
@@ -187,4 +190,5 @@ export function contextParams(params: { readonly [name: string]: string | number
 const REACHES: readonly Reach[] = [1, 2, 3];
 const DEFAULT_HOPS: Reach = 2;
 /** Nothing lies over the window's canvas but its zoom buttons, in a corner. */
-const NOTHING_COVERS = { right: 0 };
+/** The preview has no panel over it on either side. */
+const NOTHING_COVERS = { right: 0, left: 0 };
