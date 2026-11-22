@@ -121,7 +121,8 @@ export function Shell() {
 
   return (
     <PaletteContext value={palette}>
-        <div className={withCanvas ? "app with-canvas" : "app"}>
+        {/* The graph draws to the frame's edges, so it loses the main area's padding. */}
+        <div className={`app${withCanvas ? " with-canvas" : ""}${(view ?? background).name === "graph" ? " graph-bleed" : ""}`}>
           <TopBar stations={withCanvas} />
           <div className="app-body">
             <Rail />

@@ -32,6 +32,8 @@
   --group-3: #6fd9c4;
   --group-4: #f2908c;
   --on-group: #0b0c0d;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --sans:
     "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
@@ -292,6 +294,9 @@ a.ws-switch:hover {
   opacity: 0.45;
   cursor: default;
 }
+/* The graph draws to the frame's edges: the fit frames the field to the box it is
+   given, so the main area's margin and border are that much field it cannot spend. */
+.app.graph-bleed .main { margin: 0; border: 0; border-radius: 0; }
 .icon-btn {
   width: 28px;
   height: 28px;
