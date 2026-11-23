@@ -18,7 +18,7 @@ from trackinizer.lib.postgres import PGliteEngine
 from trackinizer.lib.postgres.testing import reset_schema
 from trackinizer.server.store.core import Store, StubEmbedder
 from trackinizer.types.errors import ConflictError
-from trackinizer.wire.bodies import SubmitIssue
+from trackinizer.wire.bodies import SubmitBelief, SubmitExperiment, SubmitIssue
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -250,3 +250,152 @@ async def test_parallel_workers_drain_shared_queue_exactly_once(
         assert comp_counts[iid]["n"] == 1
         assert comp_counts[iid]["actor"] == row["owner"]
         assert row["owner"] in list(row["subscribers"] or [])
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_parallel_workers_write_one_shared_graph(store: Store) -> None:
+    """K agents claim issues AND record findings into the shared graph.
+
+    Beyond the claim contract: every completed issue leaves exactly one
+    experiment and one finding belief wired by produced/proves edges, every
+    worker also cites one shared root belief (the cross-agent convergence
+    point), the edges carry their signed valence through the concurrent
+    writes, and every write in the storm is attributed to the acting agent
+    -- the graph reads back as if one careful agent had recorded the whole
+    campaign.
+    """
+    issue_count, worker_count = 12, 6
+    account = "tester@example.com"
+    issue_ids = [
+        await store.submit_issue(
+            SubmitIssue(account=account, title=f"job {i}"),
+            actor="coordinator",
+        )
+        for i in range(issue_count)
+    ]
+    shared_root = await store.submit_belief(
+        SubmitBelief(account=account, title="shared root finding"),
+        actor="coordinator",
+    )
+
+    async def worker(name: str) -> list[tuple]:
+        recorded: list[tuple] = []
+        while True:
+            nxt = await store.next_issue()
+            if nxt is None:
+                return recorded
+            try:
+                await store.transition_owner(
+                    nxt.id,
+                    expected_from=None,
+                    to=name,
+                    actor=name,
+                )
+            except ConflictError:
+                continue
+            experiment = await store.submit_experiment(
+                SubmitExperiment(
+                    account=account,
+                    title=f"run on job {nxt.seq}",
+                    outcome="confirmed",
+                ),
+                actor=name,
+            )
+            finding = await store.submit_belief(
+                SubmitBelief(
+                    account=account,
+                    title=f"finding from job {nxt.seq}",
+                    judgement="proven",
+                ),
+                actor=name,
+            )
+            await store.add_edge(
+                from_id=experiment,
+                to_id=finding,
+                edge_kind="proves",
+                valence=0.8,
+                actor=name,
+            )
+            await store.add_edge(
+                from_id=experiment,
+                to_id=nxt.id,
+                edge_kind="produced_by",
+                actor=name,
+            )
+            await store.add_edge(
+                from_id=experiment,
+                to_id=shared_root,
+                edge_kind="favors",
+                valence=0.3,
+                actor=name,
+            )
+            await store.transition_status(
+                nxt.id,
+                expected_from="active",
+                to="complete",
+                actor=name,
+            )
+            recorded.append((nxt.id, experiment, finding))
+
+    outcomes = await asyncio.gather(
+        *(worker(f"worker-{i}") for i in range(worker_count)),
+    )
+    recorded = [entry for worker_outcome in outcomes for entry in worker_outcome]
+
+    # Claim invariants: every issue completed exactly once, one winner each.
+    assert sorted(issue for issue, _, _ in recorded) == sorted(issue_ids)
+    assert len(recorded) == len(set(issue for issue, _, _ in recorded))
+
+    async with store.engine.acquire() as conn:
+        experiments = await conn.fetch(
+            "SELECT id FROM inquiries WHERE kind = 'Experiment'",
+        )
+        beliefs = await conn.fetch(
+            "SELECT id FROM inquiries WHERE kind = 'Belief'",
+        )
+        edges = await conn.fetch(
+            "SELECT from_id, to_id, edge_kind, valence FROM edges",
+        )
+        unattributed = await conn.fetch(
+            "SELECT count(*) AS n FROM change_log "
+            "WHERE actor IN ('system', 'librarian') "
+            "AND kind IN ('created', 'edge_added', 'owner', 'status')",
+        )
+
+    # Exactly one experiment and one finding per completed issue, plus the
+    # shared root: the graph grew by precisely what the campaign produced.
+    assert len(experiments) == issue_count
+    assert len(beliefs) == issue_count + 1
+    exp_ids = {exp for _, exp, _ in recorded}
+    finding_ids = {finding for _, _, finding in recorded}
+    assert {row["id"] for row in experiments} == exp_ids
+    assert {row["id"] for row in beliefs} == finding_ids | {shared_root}
+
+    # Every worker's edges landed, exactly three per experiment (proves its
+    # finding, produced_by its issue, favors the shared root); the edge PK
+    # makes duplicates impossible, so the count pins completeness too.
+    assert len(edges) == 3 * issue_count
+    assert len(edges) == len({(r["from_id"], r["to_id"], r["edge_kind"]) for r in edges})
+
+    def has_edge(
+        from_id: object,
+        to_id: object,
+        kind: str,
+        valence: float | None = None,
+    ) -> bool:
+        return any(
+            row["from_id"] == from_id
+            and row["to_id"] == to_id
+            and row["edge_kind"] == kind
+            and (valence is None or row["valence"] == valence)
+            for row in edges
+        )
+
+    for issue_id, experiment, finding in recorded:
+        assert has_edge(experiment, finding, "proves", 0.8)
+        assert has_edge(experiment, issue_id, "produced_by")
+        assert has_edge(experiment, shared_root, "favors", 0.3)
+
+    # Attribution: no campaign write landed under the default actor.
+    assert unattributed[0]["n"] == 0
