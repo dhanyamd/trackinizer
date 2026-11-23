@@ -15,6 +15,7 @@ import pytest_asyncio
 from trackinizer.lib.postgres import PGliteEngine
 from trackinizer.lib.postgres.testing import reset_schema
 from trackinizer.server.store.core import Store, StubEmbedder
+from trackinizer.types.errors import ConflictError
 from trackinizer.wire.bodies import SubmitIssue
 
 
@@ -46,3 +47,53 @@ async def test_next_issue_skips_owned(store: Store) -> None:
     nxt2 = await store.next_issue()
     assert nxt2 is not None
     assert nxt2.id == claimed
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_claim_rejects_stale_expected_owner(store: Store) -> None:
+    """A claim carrying a stale guard loses to the committed claimant."""
+    task = await store.submit_issue(
+        SubmitIssue(account="tester@example.com", title="contended"),
+    )
+    await store.transition_owner(
+        task,
+        expected_from=None,
+        to="worker-1",
+        actor="worker-1",
+        reason="claim",
+    )
+    with pytest.raises(ConflictError):
+        await store.transition_owner(
+            task,
+            expected_from=None,
+            to="worker-2",
+            actor="worker-2",
+        )
+    row = await store.get_inquiry(task)
+    assert row is not None
+    assert row.owner == "worker-1"
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_claim_records_reason_on_audit_row(store: Store) -> None:
+    """The claim's --reason lands on the change_log row."""
+    task = await store.submit_issue(
+        SubmitIssue(account="tester@example.com", title="audited claim"),
+    )
+    await store.transition_owner(
+        task,
+        expected_from=None,
+        to="worker-1",
+        actor="worker-1",
+        reason="taking this leaf",
+    )
+    async with store.engine.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT reason FROM change_log WHERE subject_id = $1 "
+            "AND kind = 'owner'",
+            task,
+        )
+    assert row is not None
+    assert row["reason"] == "taking this leaf"

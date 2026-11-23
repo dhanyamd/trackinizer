@@ -400,7 +400,7 @@ def test_kind_verb_mixes_read_write_left_to_right(
     assert capsys.readouterr().out == "row\nset: Issue#1 title = New\nrow\n"
     assert [call[0] for call in client.calls] == [
         "get_inquiry",
-        "resolve_id",
+        "get_inquiry",
         "edit",
         "get_inquiry",
     ]
@@ -1822,19 +1822,38 @@ def test_resource_cost_reads_current_axis(
     assert capsys.readouterr().out == "2.000000\n"
 
 
-def test_status_uses_positional_field_edit(client: FakeClient) -> None:
+def test_status_transitions_instead_of_blind_edit(client: FakeClient) -> None:
     run(["issue", "7", "status", "to", "complete", "--as=alice"], client)
-    edit_calls = [c for c in client.calls if c[0] == "edit"]
-    assert len(edit_calls) == 1
-    assert edit_calls[0][1][1] == "status"
-    assert edit_calls[0][1][2] == "complete"
+    transitions = [c for c in client.calls if c[0] == "transition_status"]
+    assert len(transitions) == 1
+    assert transitions[0][2]["to"] == "complete"
+    assert transitions[0][2]["actor"] == "alice"
+    assert not [c for c in client.calls if c[0] == "edit"]
 
 
-def test_owner_uses_positional_field_edit(client: FakeClient) -> None:
+def test_owner_claims_via_compare_and_set(client: FakeClient) -> None:
     run(["issue", "7", "owner", "to", "alice", "--as=alice"], client)
-    edit_calls = [c for c in client.calls if c[0] == "edit"]
-    assert edit_calls[0][1][1] == "owner"
-    assert edit_calls[0][1][2] == "alice"
+    transitions = [c for c in client.calls if c[0] == "transition_owner"]
+    assert len(transitions) == 1
+    assert transitions[0][2]["to"] == "alice"
+    assert transitions[0][2]["actor"] == "alice"
+    # The guard is the row's owner at read time: a peer claiming in between
+    # is a 409, not a silent steal.
+    assert "expected_from" in transitions[0][2]
+    assert not [c for c in client.calls if c[0] == "edit"]
+
+
+def test_owner_claim_conflict_raises_actionable_error(client: FakeClient) -> None:
+    def boom(*args: object, **kwargs: object) -> None:
+        raise ClientError(
+            "PUT /api/inquiries/x/owner -> 409: "
+            '{"detail":"owner transition rejected: expected None, '
+            "found 'worker-2'\",\"code\":\"conflict\"}"
+        )
+
+    client.transition_owner = boom  # type: ignore[method-assign]
+    with pytest.raises(ClientError, match=r"run `trax next`"):
+        run(["issue", "7", "owner", "to", "alice", "--as=alice"], client)
 
 
 def test_del_issue_kind_removes_list_value(client: FakeClient) -> None:
@@ -2191,9 +2210,9 @@ def test_run_action_rejects_unknown_action_variant() -> None:
 def test_bulk_apply_single_match_applies_without_flag(client: FakeClient) -> None:
     """A query matching one row applies directly, no ``--makeitso`` needed."""
     run(["experiment", "status", "is", "complete", "owner", "to", "alice"], client)
-    edits = [c for c in client.calls if c[0] == "edit"]
-    assert len(edits) == 1
-    assert edits[0][1][1:] == ("owner", "alice")
+    transitions = [c for c in client.calls if c[0] == "transition_owner"]
+    assert len(transitions) == 1
+    assert transitions[0][2]["to"] == "alice"
 
 
 def test_bulk_apply_multi_match_without_flag_previews_only(
@@ -2217,9 +2236,9 @@ def test_bulk_apply_multi_match_with_flag_edits_each(client: FakeClient) -> None
         ["issue", "status", "is", "active", "owner", "to", "Josh", "--makeitso"],
         client,
     )
-    edits = [c for c in client.calls if c[0] == "edit"]
-    assert len(edits) == active
-    assert all(c[1][1:] == ("owner", "Josh") for c in edits)
+    transitions = [c for c in client.calls if c[0] == "transition_owner"]
+    assert len(transitions) == active
+    assert all(c[2]["to"] == "Josh" for c in transitions)
 
 
 def test_bulk_apply_range_selects_each_matched_row(client: FakeClient) -> None:
@@ -2316,7 +2335,7 @@ def test_bulk_apply_updates_matches_beyond_default_limit(client: FakeClient) -> 
         for i in range(1, 52)
     ]
     run(["issue", "status", "is", "active", "owner", "to", "bob", "--makeitso"], client)
-    assert len([c for c in client.calls if c[0] == "edit"]) == 51
+    assert len([c for c in client.calls if c[0] == "transition_owner"]) == 51
 
 
 def test_bulk_apply_resolves_file_value(

@@ -412,6 +412,7 @@ class _EditMixin(_CascadeAuditMixin):
         to: Inquiry.Actor | None,
         api_key_id: UUID | None = None,
         actor: Inquiry.Actor,
+        reason: str = "",
     ) -> UUID | None:
         """Compare-and-set owner while holding the inquiry row lock.
 
@@ -422,6 +423,7 @@ class _EditMixin(_CascadeAuditMixin):
           to: New owner; ``None`` releases ownership.
           api_key_id: Authenticated credential recorded in the audit entry.
           actor: Identity recorded in the audit entry.
+          reason: Optional explanation of the ownership change.
 
         Returns:
           change_id: Audit change identifier, or ``None`` for a no-op.
@@ -472,6 +474,7 @@ class _EditMixin(_CascadeAuditMixin):
                 new=Snapshot(owner=new_owner),
                 api_key_id=api_key_id,
                 actor=actor,
+                reason=reason,
             )
             return change_id
 

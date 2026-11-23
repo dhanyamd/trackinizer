@@ -319,13 +319,19 @@ class FakeClient:
         expected_from: Inquiry.Actor | None,
         to: Inquiry.Actor | None,
         actor: Inquiry.Actor,
+        reason: str = "",
     ) -> None:
         """Transition owner."""
         self.calls.append(
             (
                 "transition_owner",
                 (target_id,),
-                {"expected_from": expected_from, "to": to, "actor": actor},
+                {
+                    "expected_from": expected_from,
+                    "to": to,
+                    "actor": actor,
+                    "reason": reason,
+                },
             ),
         )
 

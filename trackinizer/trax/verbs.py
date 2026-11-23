@@ -1806,15 +1806,56 @@ def run_set_field(
 
     """
     client = client_factory()
-    _, target_id = client.resolve_id(ref)
+    _, target_id, payload = client.get_inquiry(ref)
     value = _resolve_set_value(action, client)
-    client.edit(
-        target_id,
-        action.field,
-        value,
-        actor=resolve_actor(_arg_str(args, "actor"), client),
-        reason=_arg_str(args, "reason"),
-    )
+    actor = resolve_actor(_arg_str(args, "actor"), client)
+    reason = _arg_str(args, "reason")
+    row = DictCodec.coerce(payload["self"])
+    # ``owner`` and ``status`` are the contention fields: under parallel
+    # agents a blind overwrite silently steals a claim or a close. Read the
+    # current value, then compare-and-set -- a peer writing in between is a
+    # 409 the caller can act on, not a lost update.
+    if action.field == "owner":
+        try:
+            client.transition_owner(
+                target_id,
+                expected_from=cast("str | None", row.get("owner")),
+                to=cast("str | None", value),
+                actor=actor,
+                reason=reason,
+            )
+        except ClientError as err:
+            if "-> 409" in str(err):
+                raise ClientError(
+                    f"{ref} owner changed since you read it -- another "
+                    f"agent may have claimed it ({err}); run `trax next` "
+                    "for open work"
+                ) from err
+            raise
+    elif action.field == "status":
+        try:
+            client.transition_status(
+                target_id,
+                expected_from=cast("str", row.get("status")),
+                to=cast("str", value),
+                actor=actor,
+                reason=reason,
+            )
+        except ClientError as err:
+            if "-> 409" in str(err):
+                raise ClientError(
+                    f"{ref} status changed since you read it ({err}); "
+                    "re-read the row before closing it"
+                ) from err
+            raise
+    else:
+        client.edit(
+            target_id,
+            action.field,
+            value,
+            actor=actor,
+            reason=reason,
+        )
     echo(f"set: {ref} {action.field} = {_set_field_echo(action)}")
 
 

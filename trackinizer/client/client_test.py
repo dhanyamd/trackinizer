@@ -1092,6 +1092,7 @@ class TestClientMethods:
                     "value": "worker-1",
                     "mode": "cas",
                     "expected": None,
+                    "reason": "",
                 },
             ),
         ]

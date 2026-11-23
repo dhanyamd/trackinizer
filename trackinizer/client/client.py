@@ -1045,6 +1045,7 @@ class Client:
         expected_from: Inquiry.Actor | None,
         to: Inquiry.Actor | None,
         actor: Inquiry.Actor,
+        reason: str = "",
     ) -> None:
         """Compare-and-set the owner; 409s if it is not ``expected_from``.
 
@@ -1053,6 +1054,7 @@ class Client:
           expected_from: Current owner (guard, raises 409 if mismatch).
           to: New owner (None = unowned).
           actor: Change actor for audit log.
+          reason: Optional audit note.
 
         """
         self.put(
@@ -1062,6 +1064,7 @@ class Client:
                 "value": to,
                 "mode": "cas",
                 "expected": expected_from,
+                "reason": reason,
             },
         )
 

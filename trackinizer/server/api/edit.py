@@ -268,6 +268,7 @@ async def _run_compare_and_set(
             to=cast(Inquiry.Actor | None, body.value),
             api_key_id=identity.api_key_id,
             actor=actor,
+            reason=body.reason,
         )
     if route.column == "status":
         return await store.transition_status(
