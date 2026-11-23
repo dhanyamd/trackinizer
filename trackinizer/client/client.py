@@ -1101,6 +1101,39 @@ class Client:
             },
         )
 
+    def transition_judgement(
+        self,
+        target_id: uuid.UUID,
+        *,
+        expected_from: object,
+        to: object,
+        actor: Inquiry.Actor,
+        reason: str = "",
+    ) -> None:
+        """Compare-and-set a Belief judgement; 409s if it isn't ``expected_from``.
+
+        Sent as a PUT on the ``judgement`` field with ``mode='cas'`` and the
+        ``expected`` guard.
+
+        Args:
+          target_id: Belief ID to transition.
+          expected_from: Current judgement (guard, raises 409 if mismatch).
+          to: New judgement.
+          actor: Change actor for audit log.
+          reason: Optional audit note.
+
+        """
+        self.put(
+            _field_path(target_id, "judgement"),
+            body={
+                "actor": actor,
+                "value": to,
+                "mode": "cas",
+                "expected": expected_from,
+                "reason": reason,
+            },
+        )
+
     def purge(
         self,
         target_id: uuid.UUID,

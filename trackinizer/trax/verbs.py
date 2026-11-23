@@ -1806,6 +1806,14 @@ def run_action(
         raise TypeError(f"unhandled Action variant: {type(action).__name__}")
 
 
+# The contention fields, from the wire contract: ``FieldSet(mode='cas')`` is
+# valid on exactly ``owner``, ``status``, and ``judgement`` (wire/bodies.py).
+# A blind overwrite on any of them silently steals a claim, a close, or a
+# verdict; every other field's last-write-wins is the documented edit
+# semantic.
+_CAS_FIELDS: Final[frozenset[str]] = frozenset({"owner", "status", "judgement"})
+
+
 def run_set_field(
     ref: Ref,
     action: SetField,
@@ -1826,42 +1834,29 @@ def run_set_field(
     value = _resolve_set_value(action, client)
     actor = resolve_actor(_arg_str(args, "actor"), client)
     reason = _arg_str(args, "reason")
-    row = DictCodec.coerce(payload["self"])
-    # ``owner`` and ``status`` are the contention fields: under parallel
-    # agents a blind overwrite silently steals a claim or a close. Read the
-    # current value, then compare-and-set -- a peer writing in between is a
-    # 409 the caller can act on, not a lost update.
-    if action.field == "owner":
+    if action.field in _CAS_FIELDS:
+        # Read the current value, then compare-and-set: a peer writing in
+        # between is a 409 the caller can act on, not a lost update.
+        current = DictCodec.coerce(payload["self"]).get(action.field)
+        transition = getattr(client, f"transition_{action.field}")
         try:
-            client.transition_owner(
+            transition(
                 target_id,
-                expected_from=cast("str | None", row.get("owner")),
-                to=cast("str | None", value),
+                expected_from=current,
+                to=value,
                 actor=actor,
                 reason=reason,
             )
         except ClientError as err:
-            if "-> 409:" in str(err):
+            if getattr(err, "status_code", None) == 409:
+                hint = (
+                    "run `trax next` for open work"
+                    if action.field == "owner"
+                    else f"re-read the row before setting {action.field}"
+                )
                 raise ClientError(
-                    f"{ref} owner changed since you read it -- another "
-                    f"agent may have claimed it ({err}); run `trax next` "
-                    "for open work"
-                ) from err
-            raise
-    elif action.field == "status":
-        try:
-            client.transition_status(
-                target_id,
-                expected_from=cast("str", row.get("status")),
-                to=cast("str", value),
-                actor=actor,
-                reason=reason,
-            )
-        except ClientError as err:
-            if "-> 409:" in str(err):
-                raise ClientError(
-                    f"{ref} status changed since you read it ({err}); "
-                    "re-read the row before closing it"
+                    f"{ref} {action.field} changed since you read it -- "
+                    f"another agent may have written it ({err}); {hint}"
                 ) from err
             raise
     else:

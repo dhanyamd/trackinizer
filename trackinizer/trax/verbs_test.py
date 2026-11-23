@@ -337,11 +337,11 @@ def test_kind_verb_projects_multiple_fields(
 
 def test_kind_verb_with_seq_and_positional_field_edits(client: FakeClient) -> None:
     run(["belief", "3", "judgement", "to", "proven", "--as=alice"], client)
-    edit_calls = [c for c in client.calls if c[0] == "edit"]
-    assert len(edit_calls) == 1
-    assert edit_calls[0][1][1] == "judgement"
-    assert edit_calls[0][1][2] == "proven"
-    assert edit_calls[0][2]["actor"] == "alice"
+    transitions = [c for c in client.calls if c[0] == "transition_judgement"]
+    assert len(transitions) == 1
+    assert transitions[0][2]["to"] == "proven"
+    assert transitions[0][2]["actor"] == "alice"
+    assert not [c for c in client.calls if c[0] == "edit"]
 
 
 def test_kind_verb_multi_field_edit(client: FakeClient) -> None:
@@ -361,7 +361,9 @@ def test_kind_verb_multi_field_edit(client: FakeClient) -> None:
     )
     edit_calls = [c for c in client.calls if c[0] == "edit"]
     fields = {call[1][1] for call in edit_calls}
-    assert fields == {"judgement", "confidence"}
+    assert fields == {"confidence"}
+    transitions = [c for c in client.calls if c[0] == "transition_judgement"]
+    assert [t[2]["to"] for t in transitions] == ["proven"]
 
 
 def test_kind_verb_multi_field_rejects_all_on_kind_mismatch(
@@ -1848,12 +1850,24 @@ def test_owner_claim_conflict_raises_actionable_error(client: FakeClient) -> Non
         raise ClientError(
             "PUT /api/inquiries/x/owner -> 409: "
             '{"detail":"owner transition rejected: expected None, '
-            "found 'worker-2'\",\"code\":\"conflict\"}"
+            "found 'worker-2'\",\"code\":\"conflict\"}",
+            status_code=409,
+            code="conflict",
         )
 
     client.transition_owner = boom  # type: ignore[method-assign]
     with pytest.raises(ClientError, match=r"run `trax next`"):
         run(["issue", "7", "owner", "to", "alice", "--as=alice"], client)
+
+
+def test_judgement_transitions_instead_of_blind_edit(client: FakeClient) -> None:
+    """Two reviewers racing a verdict must not silently clobber each other."""
+    run(["belief", "3", "judgement", "to", "proven", "--as=alice"], client)
+    transitions = [c for c in client.calls if c[0] == "transition_judgement"]
+    assert len(transitions) == 1
+    assert transitions[0][2]["to"] == "proven"
+    assert "expected_from" in transitions[0][2]
+    assert not [c for c in client.calls if c[0] == "edit"]
 
 
 def test_del_issue_kind_removes_list_value(client: FakeClient) -> None:

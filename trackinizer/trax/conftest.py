@@ -335,6 +335,29 @@ class FakeClient:
             ),
         )
 
+    def transition_judgement(
+        self,
+        target_id: uuid.UUID,
+        *,
+        expected_from: object,
+        to: object,
+        actor: Inquiry.Actor,
+        reason: str = "",
+    ) -> None:
+        """Transition judgement."""
+        self.calls.append(
+            (
+                "transition_judgement",
+                (target_id,),
+                {
+                    "expected_from": expected_from,
+                    "to": to,
+                    "actor": actor,
+                    "reason": reason,
+                },
+            ),
+        )
+
     def transition_status(
         self,
         target_id: uuid.UUID,

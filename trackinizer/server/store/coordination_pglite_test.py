@@ -2,12 +2,16 @@
 
 The multi-agent coordination contract under test: an ``active`` row with no
 ``owner`` is open; with an ``owner`` it is in progress. ``trax next`` and the
-claim transition must hold that contract when many agents race.
+claim transition must hold that contract when many agents race. The
+communication leg proves changes reach live subscribed owners through the
+real inbound channel.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import suppress
+from datetime import UTC, datetime
 
 import asyncio
 import uuid
@@ -17,8 +21,10 @@ import pytest_asyncio
 
 from trackinizer.lib.postgres import PGliteEngine
 from trackinizer.lib.postgres.testing import reset_schema
+from trackinizer.server.inbound import InboundQueue
 from trackinizer.server.store.change_id_slot import set_client_change_id
 from trackinizer.server.store.core import Store, StubEmbedder
+from trackinizer.server.subscriber import push_changes_to_live_subscribers
 from trackinizer.types.errors import ConflictError
 from trackinizer.wire.bodies import (
     SubmitAgentSession,
@@ -713,3 +719,74 @@ async def test_claim_retry_with_idempotency_key_replays_once(store: Store) -> No
     # Exactly one subscription despite the claim emitting both an owner
     # change and a subscribers change.
     assert list(row.subscribers or []).count("worker-1") == 1
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_peer_change_reaches_live_owner_through_the_channel(store: Store) -> None:
+    """Communication: a change to a claimed row is swept into the owner's
+    LIVE session inbound queue -- 'owners notified' through the real channel.
+
+    The full loop this pins: claim auto-subscribes -> change_log carries the
+    subscribers snapshot -> the sweep resolves the subscriber to a live
+    AgentSession -> the envelope lands in that session's queue, addressed
+    with the actor and the row the agent can act on. An ended session no
+    longer resolves, so a restarted agent is not double-addressed.
+    """
+    account = "tester@example.com"
+    session_id, granted, _ = await store.start_session(
+        SubmitAgentSession(account=account, title="worker-1 live"),
+        requested_actor="worker-1",
+    )
+    assert granted == "worker-1"
+
+    task = await store.submit_issue(
+        SubmitIssue(account=account, title="notify me"),
+        actor="coordinator",
+    )
+    await store.transition_owner(
+        task,
+        expected_from=None,
+        to="worker-1",
+        actor="worker-1",
+    )
+
+    # Addressing: the live session resolves by actor name.
+    live = await store.resolve_live_sessions("worker-1")
+    assert [sid for sid, _ in live] == [session_id]
+
+    inbound = InboundQueue()
+    sweep = asyncio.create_task(
+        push_changes_to_live_subscribers(
+            store,
+            inbound,
+            sweep_interval_sec=0.05,
+        ),
+    )
+    try:
+        # A peer closes the row worker-1 claimed.
+        await store.transition_status(
+            task,
+            expected_from="active",
+            to="complete",
+            actor="worker-2",
+        )
+        delivered: list = []
+        for _ in range(100):  # <= 5s; the sweep ticks every 50ms.
+            delivered = inbound.drain(session_id)
+            if any("status" in m.text and "worker-2" in m.text for m in delivered):
+                break
+            await asyncio.sleep(0.05)
+    finally:
+        sweep.cancel()
+        with suppress(asyncio.CancelledError):
+            await sweep
+
+    matches = [m for m in delivered if "status" in m.text and "worker-2" in m.text]
+    assert matches, f"owner's live session never got the peer change: {delivered}"
+    # The envelope names the row the agent can act on (trax issue <seq>).
+    assert "issue" in matches[0].text
+
+    # Ended sessions stop resolving: the channel does not address the dead.
+    await store.end_session(session_id, ended=datetime.now(UTC), actor="worker-1")
+    assert await store.resolve_live_sessions("worker-1") == []
