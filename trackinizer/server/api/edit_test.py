@@ -303,7 +303,12 @@ class TestRoutes:
         route_client: tuple[TestClient, Store, FakeEngine],
     ) -> None:
         client, _store, engine = route_client
-        set_field_row(engine.conn, {"owner": None, "kind": "Issue"})
+        # The claim subscribes the new owner, so the row read must carry the
+        # subscribers column too.
+        set_field_row(
+            engine.conn,
+            {"owner": None, "subscribers": [], "kind": "Issue"},
+        )
 
         response = client.put(
             f"/api/inquiries/{new_uuid()}/owner",
@@ -322,7 +327,10 @@ class TestRoutes:
         route_client: tuple[TestClient, Store, FakeEngine],
     ) -> None:
         client, _store, engine = route_client
-        set_field_row(engine.conn, {"owner": "worker-1", "kind": "Issue"})
+        set_field_row(
+            engine.conn,
+            {"owner": "worker-1", "subscribers": [], "kind": "Issue"},
+        )
 
         response = client.put(
             f"/api/inquiries/{new_uuid()}/owner",
