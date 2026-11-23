@@ -10,12 +10,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import asyncio
+import uuid
 
 import pytest
 import pytest_asyncio
 
 from trackinizer.lib.postgres import PGliteEngine
 from trackinizer.lib.postgres.testing import reset_schema
+from trackinizer.server.store.change_id_slot import set_client_change_id
 from trackinizer.server.store.core import Store, StubEmbedder
 from trackinizer.types.errors import ConflictError
 from trackinizer.wire.bodies import (
@@ -669,3 +671,45 @@ async def test_parallel_workers_exercise_the_full_vocabulary(
     assert still_open == 0
     # Attribution: no campaign write landed under the default actor.
     assert unattributed[0]["n"] == 0
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_claim_retry_with_idempotency_key_replays_once(store: Store) -> None:
+    """A retried claim (same client key) replays its change and does not
+    double-subscribe: the auto-subscribe and the idempotency slot interact
+    exactly once."""
+    task = await store.submit_issue(
+        SubmitIssue(account="tester@example.com", title="retried claim"),
+    )
+    key = uuid.uuid4()
+    set_client_change_id(key)
+    try:
+        first = await store.transition_owner(
+            task,
+            expected_from=None,
+            to="worker-1",
+            actor="worker-1",
+        )
+    finally:
+        set_client_change_id(None)
+    assert first == key
+
+    set_client_change_id(key)
+    try:
+        replay = await store.transition_owner(
+            task,
+            expected_from=None,
+            to="worker-1",
+            actor="worker-1",
+        )
+    finally:
+        set_client_change_id(None)
+    assert replay == key
+
+    row = await store.get_inquiry(task)
+    assert row is not None
+    assert row.owner == "worker-1"
+    # Exactly one subscription despite the claim emitting both an owner
+    # change and a subscribers change.
+    assert list(row.subscribers or []).count("worker-1") == 1

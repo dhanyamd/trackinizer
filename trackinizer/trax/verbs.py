@@ -1841,7 +1841,7 @@ def run_set_field(
                 reason=reason,
             )
         except ClientError as err:
-            if "-> 409" in str(err):
+            if "-> 409:" in str(err):
                 raise ClientError(
                     f"{ref} owner changed since you read it -- another "
                     f"agent may have claimed it ({err}); run `trax next` "
@@ -1858,7 +1858,7 @@ def run_set_field(
                 reason=reason,
             )
         except ClientError as err:
-            if "-> 409" in str(err):
+            if "-> 409:" in str(err):
                 raise ClientError(
                     f"{ref} status changed since you read it ({err}); "
                     "re-read the row before closing it"
