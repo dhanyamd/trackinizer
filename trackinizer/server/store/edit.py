@@ -476,6 +476,23 @@ class _EditMixin(_CascadeAuditMixin):
                 actor=actor,
                 reason=reason,
             )
+            # The claimant becomes a subscriber: the dependency_changed
+            # cascade and the live sweep only reach actors in subscribers,
+            # and an agent claiming work with no other subscription would
+            # otherwise never hear about changes to the row it owns. The
+            # on-conn variant keeps the write inside this transaction; an
+            # add-present is its own idempotent no-op. Releasing ownership
+            # (to=None) keeps the subscription: the ex-owner still watches.
+            if new_owner is not None:
+                await self._mutate_list_field_on_conn(
+                    conn,
+                    target_id,
+                    new_owner,
+                    column="subscribers",
+                    api_key_id=api_key_id,
+                    actor=actor,
+                    include=True,
+                )
             return change_id
 
     async def set_account(

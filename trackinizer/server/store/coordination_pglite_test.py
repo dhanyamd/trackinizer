@@ -97,3 +97,41 @@ async def test_claim_records_reason_on_audit_row(store: Store) -> None:
         )
     assert row is not None
     assert row["reason"] == "taking this leaf"
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_claim_subscribes_owner(store: Store) -> None:
+    """Claiming subscribes the new owner; release keeps the subscription."""
+    task = await store.submit_issue(
+        SubmitIssue(account="tester@example.com", title="watched claim"),
+    )
+    await store.transition_owner(
+        task,
+        expected_from=None,
+        to="worker-1",
+        actor="worker-1",
+    )
+    claimed = await store.get_inquiry(task)
+    assert claimed is not None
+    assert "worker-1" in (claimed.subscribers or ())
+    # A second claimant is also subscribed; the first keeps watching.
+    await store.transition_owner(
+        task,
+        expected_from="worker-1",
+        to="worker-2",
+        actor="worker-2",
+    )
+    requeued = await store.get_inquiry(task)
+    assert requeued is not None
+    assert {"worker-1", "worker-2"} <= set(requeued.subscribers or ())
+    # Releasing ownership does not unsubscribe the ex-owner.
+    await store.transition_owner(
+        task,
+        expected_from="worker-2",
+        to=None,
+        actor="worker-2",
+    )
+    released = await store.get_inquiry(task)
+    assert released is not None
+    assert {"worker-1", "worker-2"} <= set(released.subscribers or ())
