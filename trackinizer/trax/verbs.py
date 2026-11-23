@@ -1836,8 +1836,28 @@ def run_set_field(
     reason = _arg_str(args, "reason")
     if action.field in _CAS_FIELDS:
         # Read the current value, then compare-and-set: a peer writing in
-        # between is a 409 the caller can act on, not a lost update.
-        current = DictCodec.coerce(payload["self"]).get(action.field)
+        # between is a 409 the caller can act on, not a lost update. The
+        # wire renders SQL NULL as "" on these fields; normalize so "unset"
+        # compares as None.
+        current = DictCodec.coerce(payload["self"]).get(action.field) or None
+        if (
+            action.field == "owner"
+            and value  # release forms (None / empty from `to -`) always pass
+            and current is not None
+            and current != value
+            and not _arg_bool(args, "makeitso")
+        ):
+            # Claim semantics: a claim must never overwrite a known owner.
+            # A fresh-read CAS alone still lets a second agent "legitimately
+            # transfer" an issue a peer already claimed (observed live: two
+            # racing claims both exited 0 and the second stole the first).
+            # Deliberate reassignment stays possible and explicit: release
+            # first (``owner to -``) or use the bulk ``--makeitso`` transfer.
+            raise ClientError(
+                f"{ref} is owned by {current!r}; claims take open work "
+                "(run `trax next`). To reassign deliberately, release it "
+                "first (`owner to -`) or use the bulk `--makeitso` transfer."
+            )
         transition = getattr(client, f"transition_{action.field}")
         try:
             transition(

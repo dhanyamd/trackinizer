@@ -1845,6 +1845,51 @@ def test_owner_claims_via_compare_and_set(client: FakeClient) -> None:
     assert not [c for c in client.calls if c[0] == "edit"]
 
 
+def test_owner_claim_accepts_empty_string_owner(client: FakeClient) -> None:
+    """The wire renders SQL NULL as ""; an unset owner is open work."""
+    row = next(r for r in client.rows if r.get("kind") == "Issue")
+    row["owner"] = ""
+    run(["issue", "7", "owner", "to", "alice", "--as=alice"], client)
+    transitions = [c for c in client.calls if c[0] == "transition_owner"]
+    assert len(transitions) == 1
+    assert transitions[0][2]["to"] == "alice"
+
+
+def test_owner_claim_refuses_owned_issue(client: FakeClient) -> None:
+    """A claim must never overwrite a known owner (live-fire finding)."""
+    row = next(r for r in client.rows if r.get("kind") == "Issue")
+    row["owner"] = "worker-9"
+    with pytest.raises(ClientError, match=r"owned by 'worker-9'"):
+        run(["issue", "7", "owner", "to", "alice", "--as=alice"], client)
+    assert not [c for c in client.calls if c[0] == "transition_owner"]
+
+
+def test_owner_bulk_makeitso_transfers_owned_issue(client: FakeClient) -> None:
+    """Deliberate reassignment stays possible and explicit: --makeitso."""
+    row = next(r for r in client.rows if r.get("kind") == "Issue")
+    row["owner"] = "worker-9"
+    run(["issue", "7", "owner", "to", "alice", "--as=alice", "--makeitso"], client)
+    transitions = [c for c in client.calls if c[0] == "transition_owner"]
+    assert len(transitions) == 1
+    assert transitions[0][2]["expected_from"] == "worker-9"
+    assert transitions[0][2]["to"] == "alice"
+
+
+def test_owner_release_always_allowed(
+    client: FakeClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = next(r for r in client.rows if r.get("kind") == "Issue")
+    row["owner"] = "worker-9"
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    run(["issue", "7", "owner", "to", "-", "--as=alice"], client)
+    transitions = [c for c in client.calls if c[0] == "transition_owner"]
+    assert len(transitions) == 1
+    assert transitions[0][2]["expected_from"] == "worker-9"
+    # The empty release value collapses to None server-side.
+    assert not transitions[0][2]["to"]
+
+
 def test_owner_claim_conflict_raises_actionable_error(client: FakeClient) -> None:
     def boom(*args: object, **kwargs: object) -> None:
         raise ClientError(
