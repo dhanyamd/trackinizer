@@ -68,6 +68,11 @@ def _policy_exclude_clauses(
 NEXT_ISSUE_SQL: Final[str] = vetted_sql(
     "SELECT issue.* FROM inquiries issue "
     "WHERE issue.kind = 'Issue' AND issue.status = 'active' "
+    # An owned active row is in progress, not open: the skill's status model
+    # says an agent asking for work must never be handed an issue a peer
+    # already claimed. Without this predicate every concurrent ``trax next``
+    # returns the same top issue and the agents race on the claim.
+    "  AND issue.owner IS NULL "
     "  AND NOT EXISTS ("
     # ``requires`` is stored requirer -> prerequisite, so an issue with an
     # active prerequisite (its to-side) is not yet schedulable.
@@ -80,7 +85,7 @@ NEXT_ISSUE_SQL: Final[str] = vetted_sql(
     _policy_exclude_clauses(subject_alias="issue.id", policy_attr="skips_scheduler_on"),
     " ORDER BY issue.issue_priority, issue.created LIMIT 1",
 )
-"""Next active Issue whose prerequisites are terminal and which no
+"""Next unowned active Issue whose prerequisites are terminal and which no
 :data:`EdgeKindPolicy` excludes from the scheduler.
 
 Built from the policy registry: any edge kind with

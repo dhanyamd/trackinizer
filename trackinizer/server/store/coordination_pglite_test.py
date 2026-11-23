@@ -1,0 +1,48 @@
+"""Contention semantics for parallel agents sharing one issue queue.
+
+The multi-agent coordination contract under test: an ``active`` row with no
+``owner`` is open; with an ``owner`` it is in progress. ``trax next`` and the
+claim transition must hold that contract when many agents race.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+
+import pytest
+import pytest_asyncio
+
+from trackinizer.lib.postgres import PGliteEngine
+from trackinizer.lib.postgres.testing import reset_schema
+from trackinizer.server.store.core import Store, StubEmbedder
+from trackinizer.wire.bodies import SubmitIssue
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def store(pglite_engine: PGliteEngine) -> AsyncIterator[Store]:
+    """Return a bootstrapped Store over the session's shared PGlite engine."""
+    await reset_schema(pglite_engine)
+    store = Store(pglite_engine, embed=StubEmbedder())
+    await store.bootstrap()
+    yield store
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_next_issue_skips_owned(store: Store) -> None:
+    """An owned active row is in progress; next must offer unowned work."""
+    claimed = await store.submit_issue(
+        SubmitIssue(account="tester@example.com", title="claimed"),
+    )
+    open_ = await store.submit_issue(
+        SubmitIssue(account="tester@example.com", title="open"),
+    )
+    await store.set_owner(claimed, "worker-1", actor="user")
+    nxt = await store.next_issue()
+    assert nxt is not None
+    assert nxt.id == open_
+    # Releasing the claim returns the row to the schedulable pool.
+    await store.set_owner(claimed, None, actor="user")
+    nxt2 = await store.next_issue()
+    assert nxt2 is not None
+    assert nxt2.id == claimed
