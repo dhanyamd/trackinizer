@@ -599,6 +599,27 @@ class FakeClient:
             cast(object, list(self.changes)),  # -- fake changes are JSON-shaped.
         )
 
+    def list_changes(
+        self,
+        *,
+        actor: str | None = None,
+        since: str | None = None,
+        after_id: uuid.UUID | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, JSONValue]]:
+        """Filtered change-log slice (peer catch-up)."""
+        self.calls.append(
+            (
+                "list_changes",
+                (),
+                {"actor": actor, "since": since, "after_id": after_id, "limit": limit},
+            ),
+        )
+        return cast(
+            list[dict[str, JSONValue]],
+            cast(object, list(self.changes)),  # -- fake changes are JSON-shaped.
+        )
+
     def cost_for(self, target_id: uuid.UUID, *, deep: bool = False) -> dict[str, float]:
         """Cost for."""
         self.calls.append(("cost_for", (target_id,), {"deep": deep}))

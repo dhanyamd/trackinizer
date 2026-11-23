@@ -2435,18 +2435,38 @@ def test_send_at_prefix_is_optional(client: FakeClient) -> None:
     assert sends[0][1][0] == "scientist"
 
 
-def test_send_undelivered_when_no_match(
+def test_send_undelivered_fails_loudly(
     client: FakeClient,
-    capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """No live session = nonzero exit a script can branch on, not a silent 0."""
+
     def _send(actor: str, text: str, *, room: str | None = None) -> list[uuid.UUID]:
         del actor, text, room
         return []  # No live session matched.
 
     monkeypatch.setattr(client, "send_message", _send)
-    run(["send", "@ghost", "hi"], client)
-    assert "undelivered" in capsys.readouterr().out
+    with pytest.raises(ClientError, match=r"no live session matches @ghost"):
+        run(["send", "@ghost", "hi"], client)
+
+
+def test_recent_actor_since_uses_filtered_change_log(client: FakeClient) -> None:
+    """Peer catch-up: --actor/--since ride the /api/change_log filters."""
+    run(
+        ["recent", "--actor", "worker-2", "--since", "2026-11-24T00:00:00Z"],
+        client,
+    )
+    calls = [c for c in client.calls if c[0] == "list_changes"]
+    assert len(calls) == 1
+    assert calls[0][2]["actor"] == "worker-2"
+    assert calls[0][2]["since"] == "2026-11-24T00:00:00Z"
+    assert not [c for c in client.calls if c[0] == "recent_changes"]
+
+
+def test_recent_without_filters_keeps_firehose(client: FakeClient) -> None:
+    run(["recent"], client)
+    assert [c for c in client.calls if c[0] == "recent_changes"]
+    assert not [c for c in client.calls if c[0] == "list_changes"]
 
 
 def test_flat_inline_create_edge_is_atomic_no_orphan_on_edge_failure(

@@ -1879,11 +1879,14 @@ class Recent(Command):
         summary="Show recent audit-log entries.",
         options=(
             ("--limit INT", "Maximum changes to return."),
+            ("--actor TEXT", "Only changes by one actor (a peer's --as name)."),
+            ("--since TEXT", "Only changes at/after an ISO-8601 timestamp."),
             ("--format TEXT", "text|json."),
         ),
         examples=(
             "trax recent",
             "trax recent --limit 10",
+            "trax recent --actor worker-2 --since 2026-11-24T00:00:00Z",
             "trax recent --format json",
         ),
     )
@@ -1893,6 +1896,8 @@ class Recent(Command):
     def make_parser(cls) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(prog="trax recent", description=cls.__doc__)
         parser.add_argument("--limit", type=_positive_int, default=50)
+        parser.add_argument("--actor", default=None)
+        parser.add_argument("--since", default=None)
         parser.add_argument(
             "--format",
             dest="format_",
@@ -1910,7 +1915,20 @@ class Recent(Command):
         client_factory: Callable[[], Client],
     ) -> None:
         del verb
-        rows = client_factory().recent_changes(limit=_arg_int(args, "limit"))
+        client = client_factory()
+        actor = _arg_str(args, "actor")
+        since = _arg_str(args, "since")
+        # The actor/since filters are the peer-catch-up query ("what did the
+        # other agents record since my last wave"); they ride the server's
+        # existing /api/change_log filters rather than the web firehose.
+        if actor or since:
+            rows = client.list_changes(
+                actor=actor or None,
+                since=since or None,
+                limit=_arg_int(args, "limit"),
+            )
+        else:
+            rows = client.recent_changes(limit=_arg_int(args, "limit"))
         if _arg_str(args, "format_") == "json":
             echo(render.format_json(list(rows)), nl=False)
         else:
@@ -2420,8 +2438,12 @@ Notes:
         )
         if not delivered:
             scope = f"@{actor}:{room}" if room else f"@{actor}"
-            echo(f"undelivered: no live session matches {scope}")
-            return
+            # Undelivered is a failure a script or agent can branch on, not
+            # a silent no-op with a zero exit code.
+            raise ClientError(
+                f"send: no live session matches {scope} -- the peer is not "
+                "running under `trax run` right now"
+            )
         echo(f"sent to {len(delivered)} session(s)")
 
 

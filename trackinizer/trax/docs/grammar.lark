@@ -232,7 +232,7 @@ VERB_ARG: /\S+/
 //   id UUID [--format table|json] [--changes]
 //   next [--format text|json|ids]
 //   profile [NAME] [ url|actor|token [to V] | current NAME | del ]
-//   recent [--limit V] [--format text|json]
+//   recent [--limit V] [--actor V] [--since V] [--format text|json]
 //   run claude|gemini|codex|sh [--out V] [--verbose] [--dry-run] [--no-sync] [--as V] [--room V]
 //   send TARGET TEXT...
 //   version

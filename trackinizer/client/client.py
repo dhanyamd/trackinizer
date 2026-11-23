@@ -564,6 +564,43 @@ class Client:
             )
         ]
 
+    def list_changes(
+        self,
+        *,
+        actor: Inquiry.Actor | None = None,
+        since: str | None = None,
+        after_id: uuid.UUID | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, JSONValue]]:
+        """Fetch a filtered change-log slice: the peer-catch-up query.
+
+        Backs ``trax recent --actor/--since`` so an agent can ask "what did
+        the other agents record since my last wave" in one command, against
+        the server's existing ``GET /api/change_log`` filters.
+
+        Args:
+          actor: Exact actor match (a peer agent's ``--as`` name).
+          since: Minimum ``created`` (ISO-8601 timestamp string), inclusive.
+          after_id: Only rows with id greater than this (keyset pagination).
+          limit: Maximum rows (server caps at MAX_LIST_LIMIT).
+
+        Returns:
+          rows: Change rows as dicts, newest first.
+
+        """
+        params: dict[str, object] = {"limit": limit}
+        if actor is not None:
+            params["actor"] = actor
+        if since is not None:
+            params["since"] = since
+        if after_id is not None:
+            params["after_id"] = str(after_id)
+        where = "/api/change_log"
+        return [
+            dict(_require_mapping(row, where))
+            for row in _require_list(self.get(where, params=params), where)
+        ]
+
     def cost_for(self, target_id: uuid.UUID, *, deep: bool = False) -> dict[str, float]:
         """Fetch cost breakdown by field name; optionally include related rows.
 

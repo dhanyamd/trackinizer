@@ -27,6 +27,7 @@ from trackinizer.server.store.core import Store, StubEmbedder
 from trackinizer.server.subscriber import push_changes_to_live_subscribers
 from trackinizer.types.errors import ConflictError
 from trackinizer.wire.bodies import (
+    Citation,
     SubmitAgentSession,
     SubmitBelief,
     SubmitCodeChange,
@@ -790,3 +791,84 @@ async def test_peer_change_reaches_live_owner_through_the_channel(store: Store) 
     # Ended sessions stop resolving: the channel does not address the dead.
     await store.end_session(session_id, ended=datetime.now(UTC), actor="worker-1")
     assert await store.resolve_live_sessions("worker-1") == []
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_citation_valence_semantics_under_rewrites(store: Store) -> None:
+    """Collaboration data quality: recorded stances survive rewrites.
+
+    An implicit citation (no valence supplied) stores the documented mild-
+    support default on a NEW edge but never overwrites a weight already
+    recorded on an existing one -- one agent re-citing a peer must not reset
+    another agent's recorded stance. Probed first: add_edge and annotation
+    paths already preserve; this pins the semantics against regression and
+    covers the submit-path citation distinction.
+    """
+    account = "tester@example.com"
+    paper = await store.submit_paper(
+        SubmitPaper(account=account, title="evidence"),
+        actor="a1",
+    )
+    belief = await store.submit_belief(
+        SubmitBelief(
+            account=account,
+            title="claimed",
+            # Explicit weight from agent 1.
+            proved_by=[Citation(artifact_id=paper, artifact_kind="Paper", valence=0.9)],
+        ),
+        actor="a1",
+    )
+    async with store.engine.acquire() as conn:
+        v1 = await conn.fetchval(
+            "SELECT valence FROM edges WHERE from_id=$1 AND to_id=$2",
+            paper, belief,
+        )
+    assert v1 == 0.9
+
+    # A peer re-writes the citation WITHOUT a weight (wire default 0.5):
+    # the stored stance must survive on every rewrite surface.
+    await store.add_edge(
+        from_id=paper, to_id=belief, edge_kind="proves", actor="a2",
+    )
+    await store.set_edge_annotation(
+        from_id=paper, to_id=belief, edge_kind="proves",
+        note="peer review", actor="a2",
+    )
+    async with store.engine.acquire() as conn:
+        v2 = await conn.fetchval(
+            "SELECT valence FROM edges WHERE from_id=$1 AND to_id=$2",
+            paper, belief,
+        )
+    assert v2 == 0.9
+
+    # An explicit weight still overwrites (that is the annotate contract).
+    await store.add_edge(
+        from_id=paper, to_id=belief, edge_kind="proves", valence=-0.4, actor="a2",
+    )
+    async with store.engine.acquire() as conn:
+        v3 = await conn.fetchval(
+            "SELECT valence FROM edges WHERE from_id=$1 AND to_id=$2",
+            paper, belief,
+        )
+    assert v3 == -0.4
+
+    # An implicit citation on a NEW edge stores the documented default.
+    paper2 = await store.submit_paper(
+        SubmitPaper(account=account, title="more evidence"),
+        actor="a1",
+    )
+    belief2 = await store.submit_belief(
+        SubmitBelief(
+            account=account,
+            title="second claim",
+            proved_by=[Citation(artifact_id=paper2, artifact_kind="Paper")],
+        ),
+        actor="a2",
+    )
+    async with store.engine.acquire() as conn:
+        v4 = await conn.fetchval(
+            "SELECT valence FROM edges WHERE from_id=$1 AND to_id=$2",
+            paper2, belief2,
+        )
+    assert v4 == 0.5

@@ -529,6 +529,18 @@ class _SubmitMixin(_EditMixin, _EdgeMixin):
             )
             for edge_kind, items in citation_kinds:
                 for citation in items:
+                    # A citation that did not EXPLICITLY set a valence must
+                    # not overwrite one already recorded on the edge: under
+                    # parallel agents, one submit re-citing a peer without a
+                    # weight would silently reset another agent's recorded
+                    # stance to the wire default. Pass ``None`` for implicit
+                    # valence -- ``insert_edge`` defaults a NEW citation edge
+                    # to CITATION_VALENCE_DEFAULT (a citation is never stored
+                    # NULL) while the upsert branch treats ``None`` as ABSENT
+                    # and leaves the stored weight alone.
+                    explicit_valence = citation.valence if (
+                        "valence" in citation.model_fields_set
+                    ) else None
                     await self.insert_edge_and_audit(
                         conn,
                         subject_id=belief_id,
@@ -540,7 +552,7 @@ class _SubmitMixin(_EditMixin, _EdgeMixin):
                         caused_by=cause,
                         require_to_kind=citation.artifact_kind,
                         cite_peer_as_from=True,
-                        valence=citation.valence,
+                        valence=explicit_valence,
                     )
 
         return await self._submit_generic(
