@@ -18,7 +18,16 @@ from trackinizer.lib.postgres import PGliteEngine
 from trackinizer.lib.postgres.testing import reset_schema
 from trackinizer.server.store.core import Store, StubEmbedder
 from trackinizer.types.errors import ConflictError
-from trackinizer.wire.bodies import SubmitBelief, SubmitExperiment, SubmitIssue
+from trackinizer.wire.bodies import (
+    SubmitAgentSession,
+    SubmitBelief,
+    SubmitCodeChange,
+    SubmitExperiment,
+    SubmitIssue,
+    SubmitPaper,
+    SubmitWebResult,
+    SubmitWebSearch,
+)
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -397,5 +406,266 @@ async def test_parallel_workers_write_one_shared_graph(store: Store) -> None:
         assert has_edge(experiment, issue_id, "produced_by")
         assert has_edge(experiment, shared_root, "favors", 0.3)
 
+    # Attribution: no campaign write landed under the default actor.
+    assert unattributed[0]["n"] == 0
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_parallel_workers_exercise_the_full_vocabulary(
+    store: Store,
+) -> None:
+    """K agents storm the graph with the WHOLE vocabulary: all 9 node kinds,
+    all 7 edge kinds, under contention.
+
+    Each claimed job records a complete campaign slice: an AgentSession per
+    worker, an Experiment with its CodeChange/WebSearch/WebResult/Paper
+    evidence, a draft belief superseded by a final one, citations into the
+    two shared roots every worker converges on (a belief and a paper), and a
+    decomposition follow-up issue wired with narrows/requires and retired.
+    The graph must read back with exact per-kind counts, every written edge
+    in place with its sign, no duplicates, full attribution, and the queue
+    drained with nothing active left unowned.
+    """
+    issue_count, worker_count = 6, 4
+    account = "tester@example.com"
+    issue_ids = [
+        await store.submit_issue(
+            SubmitIssue(account=account, title=f"job {i}"),
+            actor="coordinator",
+        )
+        for i in range(issue_count)
+    ]
+    shared_belief = await store.submit_belief(
+        SubmitBelief(account=account, title="shared root finding"),
+        actor="coordinator",
+    )
+    shared_paper = await store.submit_paper(
+        SubmitPaper(account=account, title="Shared root paper"),
+        actor="coordinator",
+    )
+
+    async def worker(name: str) -> list[tuple]:
+        # One AgentSession per worker: the ninth kind, and the live-owner
+        # unique index under distinct owners.
+        await store.submit_agentsession(
+            SubmitAgentSession(account=account, title=f"session {name}"),
+            actor=name,
+        )
+        recorded: list[tuple] = []
+        while True:
+            nxt = await store.next_issue()
+            if nxt is None:
+                return recorded
+            try:
+                await store.transition_owner(
+                    nxt.id,
+                    expected_from=None,
+                    to=name,
+                    actor=name,
+                )
+            except ConflictError:
+                continue
+            experiment = await store.submit_experiment(
+                SubmitExperiment(
+                    account=account,
+                    title=f"run on job {nxt.seq}",
+                    outcome="confirmed",
+                ),
+                actor=name,
+            )
+            codechange = await store.submit_codechange(
+                SubmitCodeChange(
+                    account=account,
+                    title=f"patch for job {nxt.seq}",
+                    sha=f"{nxt.seq:040d}",
+                ),
+                actor=name,
+            )
+            websearch = await store.submit_websearch(
+                SubmitWebSearch(
+                    account=account,
+                    title=f"search for job {nxt.seq}",
+                    query=f"job {nxt.seq} prior art",
+                ),
+                actor=name,
+            )
+            webresult = await store.submit_webresult(
+                SubmitWebResult(
+                    account=account,
+                    title=f"hit for job {nxt.seq}",
+                    url=f"https://example.invalid/{nxt.seq}",
+                ),
+                actor=name,
+            )
+            paper = await store.submit_paper(
+                SubmitPaper(
+                    account=account,
+                    title=f"paper for job {nxt.seq}",
+                    abstract="finding",
+                ),
+                actor=name,
+            )
+            draft = await store.submit_belief(
+                SubmitBelief(account=account, title=f"draft {nxt.seq}"),
+                actor=name,
+            )
+            final = await store.submit_belief(
+                SubmitBelief(
+                    account=account,
+                    title=f"finding from job {nxt.seq}",
+                    judgement="proven",
+                ),
+                actor=name,
+            )
+            followup = await store.submit_issue(
+                SubmitIssue(account=account, title=f"follow-up to job {nxt.seq}"),
+                actor=name,
+            )
+            # The seven edge kinds: proves, favors, produced_by (x5
+            # artifacts), cites_paper, narrows, requires, supersedes.
+            await store.add_edge(
+                from_id=experiment,
+                to_id=final,
+                edge_kind="proves",
+                valence=0.8,
+                actor=name,
+            )
+            await store.add_edge(
+                from_id=experiment,
+                to_id=shared_belief,
+                edge_kind="favors",
+                valence=0.3,
+                actor=name,
+            )
+            for artifact in (experiment, codechange, websearch, webresult, paper):
+                await store.add_edge(
+                    from_id=artifact,
+                    to_id=nxt.id,
+                    edge_kind="produced_by",
+                    actor=name,
+                )
+            await store.add_edge(
+                from_id=paper,
+                to_id=shared_paper,
+                edge_kind="cites_paper",
+                actor=name,
+            )
+            await store.add_edge(
+                from_id=followup,
+                to_id=nxt.id,
+                edge_kind="narrows",
+                actor=name,
+            )
+            await store.add_edge(
+                from_id=followup,
+                to_id=nxt.id,
+                edge_kind="requires",
+                actor=name,
+            )
+            await store.add_edge(
+                from_id=final,
+                to_id=draft,
+                edge_kind="supersedes",
+                actor=name,
+            )
+            # Retire the follow-up the same transaction-shape an agent
+            # would, and close the job.
+            await store.transition_status(
+                followup,
+                expected_from="active",
+                to="abandoned",
+                actor=name,
+            )
+            await store.transition_status(
+                nxt.id,
+                expected_from="active",
+                to="complete",
+                actor=name,
+            )
+            recorded.append(
+                (nxt.id, experiment, codechange, websearch, webresult,
+                 paper, draft, final, followup),
+            )
+
+    outcomes = await asyncio.gather(
+        *(worker(f"worker-{i}") for i in range(worker_count)),
+    )
+    recorded = [entry for outcome in outcomes for entry in outcome]
+
+    # Claim invariants: every job completed exactly once.
+    assert sorted(entry[0] for entry in recorded) == sorted(issue_ids)
+    assert len(recorded) == len(set(entry[0] for entry in recorded))
+
+    async with store.engine.acquire() as conn:
+        kinds = await conn.fetch(
+            "SELECT kind, count(*) AS n FROM inquiries GROUP BY kind",
+        )
+        edges = await conn.fetch(
+            "SELECT from_id, to_id, edge_kind, valence FROM edges",
+        )
+        unattributed = await conn.fetch(
+            "SELECT count(*) AS n FROM change_log "
+            "WHERE actor IN ('system', 'librarian') "
+            "AND kind IN ('created', 'edge_added', 'owner', 'status')",
+        )
+        still_open = await conn.fetchval(
+            "SELECT count(*) FROM inquiries "
+            "WHERE kind = 'Issue' AND status = 'active' AND owner IS NULL",
+        )
+
+    by_kind = {row["kind"]: row["n"] for row in kinds}
+    # All nine node kinds, exact counts: jobs + follow-ups, one evidence set
+    # per job, draft + final beliefs plus the shared root, one session per
+    # worker, one shared paper.
+    assert by_kind == {
+        "Issue": 2 * issue_count,
+        "Experiment": issue_count,
+        "Belief": 2 * issue_count + 1,
+        "Paper": issue_count + 1,
+        "CodeChange": issue_count,
+        "WebResult": issue_count,
+        "WebSearch": issue_count,
+        "AgentSession": worker_count,
+    }
+
+    def has_edge(
+        from_id: object,
+        to_id: object,
+        kind: str,
+        valence: float | None = None,
+    ) -> bool:
+        return any(
+            row["from_id"] == from_id
+            and row["to_id"] == to_id
+            and row["edge_kind"] == kind
+            and (valence is None or row["valence"] == valence)
+            for row in edges
+        )
+
+    edge_kinds_seen = {row["edge_kind"] for row in edges}
+    assert edge_kinds_seen == {
+        "proves", "favors", "produced_by", "cites_paper",
+        "narrows", "requires", "supersedes",
+    }
+    # Edge PK: no duplicates from racing writers.
+    assert len(edges) == len(
+        {(row["from_id"], row["to_id"], row["edge_kind"]) for row in edges},
+    )
+
+    for entry in recorded:
+        (job, experiment, codechange, websearch, webresult,
+         paper, draft, final, followup) = entry
+        assert has_edge(experiment, final, "proves", 0.8)
+        assert has_edge(experiment, shared_belief, "favors", 0.3)
+        for artifact in (experiment, codechange, websearch, webresult, paper):
+            assert has_edge(artifact, job, "produced_by")
+        assert has_edge(paper, shared_paper, "cites_paper")
+        assert has_edge(followup, job, "narrows")
+        assert has_edge(followup, job, "requires")
+        assert has_edge(final, draft, "supersedes")
+
+    # The queue drained: nothing active is left unowned.
+    assert still_open == 0
     # Attribution: no campaign write landed under the default actor.
     assert unattributed[0]["n"] == 0
