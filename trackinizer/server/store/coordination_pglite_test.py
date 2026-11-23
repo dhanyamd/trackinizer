@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+import asyncio
+
 import pytest
 import pytest_asyncio
 
@@ -135,3 +137,116 @@ async def test_claim_subscribes_owner(store: Store) -> None:
     released = await store.get_inquiry(task)
     assert released is not None
     assert {"worker-1", "worker-2"} <= set(released.subscribers or ())
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_many_parallel_claimants_exactly_one_winner(store: Store) -> None:
+    """K agents claiming one fresh issue: one winner, K-1 clean 409s."""
+    task = await store.submit_issue(
+        SubmitIssue(account="tester@example.com", title="hot issue"),
+    )
+    contenders = 8
+
+    async def claim(name: str) -> str | None:
+        try:
+            await store.transition_owner(
+                task,
+                expected_from=None,
+                to=name,
+                actor=name,
+            )
+        except ConflictError:
+            return None
+        return name
+
+    results = await asyncio.gather(
+        *(claim(f"worker-{i}") for i in range(contenders)),
+    )
+    winners = [name for name in results if name is not None]
+    assert len(winners) == 1
+    row = await store.get_inquiry(task)
+    assert row is not None
+    assert row.owner == winners[0]
+    assert winners[0] in (row.subscribers or ())
+
+
+@pytest.mark.db_pglite
+@pytest.mark.asyncio(loop_scope="session")
+async def test_parallel_workers_drain_shared_queue_exactly_once(
+    store: Store,
+) -> None:
+    """K workers running the trax loop over M issues: no dupes, no losses.
+
+    The acceptance gate for multi-agent coordination: every issue completed
+    exactly once, exactly one claim winner per issue, every lost claim a
+    clean ConflictError, and the audit trail attributed per completing
+    actor -- the same end state one careful agent would have produced.
+    """
+    issue_count, worker_count = 25, 10
+    issue_ids = [
+        await store.submit_issue(
+            SubmitIssue(account="tester@example.com", title=f"job {i}"),
+        )
+        for i in range(issue_count)
+    ]
+
+    async def worker(name: str) -> tuple[list, list]:
+        completed: list = []
+        lost: list = []
+        while True:
+            nxt = await store.next_issue()
+            if nxt is None:
+                return completed, lost
+            try:
+                await store.transition_owner(
+                    nxt.id,
+                    expected_from=None,
+                    to=name,
+                    actor=name,
+                )
+            except ConflictError:
+                lost.append(nxt.id)
+                continue
+            await store.transition_status(
+                nxt.id,
+                expected_from="active",
+                to="complete",
+                actor=name,
+            )
+            completed.append(nxt.id)
+
+    outcomes = await asyncio.gather(
+        *(worker(f"worker-{i}") for i in range(worker_count)),
+    )
+    completed = [iid for comp, _ in outcomes for iid in comp]
+    lost = [iid for _, race_losses in outcomes for iid in race_losses]
+
+    # Every issue completed exactly once, by exactly one claim winner.
+    assert sorted(completed) == sorted(issue_ids)
+    assert len(completed) == len(set(completed)) == issue_count
+    # Every lost claim was a clean conflict on real work someone else took.
+    assert all(iid in issue_ids for iid in lost)
+
+    async with store.engine.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, owner, status, subscribers FROM inquiries "
+            "WHERE kind = 'Issue'",
+        )
+        completions = await conn.fetch(
+            "SELECT subject_id, count(*) AS n, max(actor) AS actor "
+            "FROM change_log WHERE kind = 'status' "
+            "AND new_status = 'complete' GROUP BY subject_id",
+        )
+
+    by_id = {row["id"]: row for row in rows}
+    assert len(rows) == issue_count
+    comp_counts = {row["subject_id"]: row for row in completions}
+    for iid in issue_ids:
+        row = by_id[iid]
+        assert row["status"] == "complete"
+        assert row["owner"] is not None
+        # The completing actor is the owner, and the owner is subscribed.
+        assert comp_counts[iid]["n"] == 1
+        assert comp_counts[iid]["actor"] == row["owner"]
+        assert row["owner"] in list(row["subscribers"] or [])
