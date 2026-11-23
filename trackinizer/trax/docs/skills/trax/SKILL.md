@@ -47,13 +47,20 @@ ownership from prose; apply these boundaries.
 10. Triage server errors by class: connection-refused/5xx = outage --
     probe `trax profile`, tell the user, keep working; HTTP 422 = your
     payload is wrong -- fix the command, do not retry verbatim; auth =
-    ask the user how the deployment is configured.
+    ask the user how the deployment is configured; HTTP 409 = the row
+    changed since you read it (another agent claimed or closed it) --
+    re-read the row, and for a lost claim take the next open work with
+    `trax next`.
 
 ## Ownership, actors, and priorities
 
 `owner` means the person or agent currently responsible for the row. For
 multi-agent work, set each child issue owner to the subagent actually doing that
-leaf; the coordinator owns only the coordination issue.
+leaf; the coordinator owns only the coordination issue. Claiming is a
+compare-and-set: if another agent claimed first, the write fails with 409 and
+names the current owner -- do not retry the same claim; take different work.
+Claiming an issue also subscribes you to it, so changes to your work reach your
+live session.
 
 Use `--as <name>` on every write so the audit log reflects who did the work.
 Use your current agent self name for your own writes. Use another actor only
@@ -285,8 +292,10 @@ Slash args forward verbatim to `trax`. A bare number routes to `trax issue <seq>
 
 ## Workflow
 
-1. Pick: `trax next` / `trax blocked` / `trax board`.
-2. Take ownership: `trax issue 7 owner to Agent`.
+1. Pick: `trax next` / `trax blocked` / `trax board`. `trax next` only offers
+   unowned rows; every agent asking gets different work.
+2. Take ownership: `trax issue 7 owner to Agent`. On a 409, another agent
+   claimed it first -- re-run `trax next` instead of retrying.
 3. Implement.
 4. Verify: `trax issue 7 validation to "pytest ... passed"`.
 5. Close when the user requests it or closing is clearly part of the task:
@@ -294,6 +303,22 @@ Slash args forward verbatim to `trax`. A bare number routes to `trax issue <seq>
 
 Re-running `description to @body.md` (or `to -`) overwrites; that is the
 recovery path when a body lands too thin.
+
+## Working with other agents
+
+When more than one agent shares this store, coordinate through it:
+
+- Before each work cycle, check what changed: `trax recent`, and
+  `trax issue 7 --changes` for rows you care about.
+- Subscribe to rows you depend on (claiming already subscribes you to your
+  own): `trax issue 7 subscriber add <your-actor>`. Live sessions receive a
+  one-line "FYI" push when a subscribed row changes.
+- Message a live peer directly: `trax send @actor:room text` (rooms were set
+  by that agent's `trax run --room`). Delivery needs a live session; treat it
+  as a tap on the shoulder, not a guaranteed handoff -- record anything
+  durable as rows instead of prose.
+- Your actor name is the `--as` you write with; messages addressed to it
+  arrive only while your `trax run` session is live.
 
 ## Per-kind authoring expectations (child docs)
 

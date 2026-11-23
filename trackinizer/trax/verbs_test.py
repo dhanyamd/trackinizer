@@ -1867,6 +1867,37 @@ def test_kind_verb_unknown_flag_rejected(client: FakeClient) -> None:
     assert not [c for c in client.calls if c[0] == "edit"]
 
 
+def test_disproves_write_echoes_disproves(
+    client: FakeClient,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A negative-valence citation confirms with its dis* spelling."""
+    run(["belief", "3", "disproves", "paper", "5", "--as=alice"], client)
+    out = capsys.readouterr().out
+    assert "disproves" in out
+    assert "proves paper" not in out
+    edges = [c for c in client.calls if c[0] == "add_edge"]
+    assert edges, "disproves must reach add_edge with a negated valence"
+    assert edges[0][2]["valence"] is not None and edges[0][2]["valence"] < 0
+
+
+def test_edge_writes_forward_reason(client: FakeClient) -> None:
+    """--reason rides both the metadata and the plain edge write paths."""
+    run(["belief", "3", "proves", "paper", "5", "--as=alice", "--reason=core"], client)
+    run(
+        [
+            "belief", "3", "proves", "paper", "5",
+            "valence", "to", "0.9",
+            "--as=alice", "--reason=graded",
+        ],
+        client,
+    )
+    edges = [c for c in client.calls if c[0] == "add_edge"]
+    assert len(edges) == 2
+    assert edges[0][2]["reason"] == "core"
+    assert edges[1][2]["reason"] == "graded"
+
+
 def test_kind_verb_unknown_positional_field_rejected(client: FakeClient) -> None:
     with pytest.raises(ClientError, match="unexpected token"):
         run(["issue", "1", "bogus", "value", "--as=alice"], client)

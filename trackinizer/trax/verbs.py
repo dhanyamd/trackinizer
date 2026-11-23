@@ -801,10 +801,16 @@ class Kind(Command):
 
         """
         client = client_factory()
-        _source_kind, src_id = client.resolve_id(source)
-        _target_kind, tgt_id = client.resolve_id(target)
+        _, src_id = client.resolve_id(source)
+        _, tgt_id = client.resolve_id(target)
         actor = resolve_actor(_arg_str(args, "actor"), client)
-        result = client.add_edge(src_id, tgt_id, relation[0], actor=actor)
+        result = client.add_edge(
+            src_id,
+            tgt_id,
+            relation[0],
+            actor=actor,
+            reason=_arg_str(args, "reason"),
+        )
         verb = "added" if result.created else "exists"
         echo(f"{verb}: {source} {relation[0]} {target}")
         _kind, _target_id, payload = client.get_inquiry(subject)
@@ -879,11 +885,21 @@ class Kind(Command):
             note=note or "",
             valence=valence,
             labels=edge_labels,
+            reason=_arg_str(args, "reason"),
+        )
+        # A negative-valence citation is written as its dis* spelling: the
+        # read side renders it that way (:meth:`_edge_payload`), and a
+        # confirmation that echoes "proves" for a `disproves` command lies
+        # about what was stored.
+        display_kind = (
+            _NEGATIVE_CITATION_TITLE[cast(Edge.Kind, edge_kind)]
+            if valence is not None and valence < 0
+            else edge_kind
         )
         if result.created:
-            echo(f"added: {source} {edge_kind} {target}")
+            echo(f"added: {source} {display_kind} {target}")
         elif result.changed:
-            echo(f"annotated: {source} {edge_kind} {target}")
+            echo(f"annotated: {source} {display_kind} {target}")
 
     @classmethod
     def run_create(
